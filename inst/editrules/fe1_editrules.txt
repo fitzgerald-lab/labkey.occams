@@ -1,0 +1,8 @@
+Column:Def:Rule
+FE1.StudySite:character:FE1.StudySite %in% c('Belfast','Birmingham','Bournemouth','Cambridge','Cambridge ps','Coventry','Edinburgh','Gloucester','Guildford','Imperial college','Kilmarnock','North stafford','Norwich','Nottingham','Other','Plymouth','Romford','Salford','Southampton','Southampton other','St thomas london','Trainingsite','Ucl','Wigan','Worcester','Wythenshaw')
+FE1.StudySubjectID:character:grepl(".*",FE1.StudySubjectID)
+FE1.DateOfUpdate:date:FE1.DateOfUpdate>as.Date("2010-01-01")
+FE1.TypeOfFollowUp:character:FE1.TypeOfFollowUp %in% c('Cancer Registration Enquiry','Check in hospital records','Discussion at MDT','Hospital clinic attendance - routine follow up','In patient hospitalisation','Information received from referring hospital','Other','Patient follow up by phone')
+FE1.ReasonForFollowUp:character:FE1.ReasonForFollowUp %in% c('Confirmed recurrence','Investigation of symptoms','Notification of death','Other','Unrelated clinical investigation')
+FE1.DateOriginalDiseaseReoccurred:date:FE1.DateOriginalDiseaseReoccurred >= FE1.DateOfUpdate
+FE1.HasOriginalDiseaseReoccurred:character:FE1.HasOriginalDiseaseReoccurred %in% c('No','Yes')

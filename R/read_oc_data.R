@@ -145,7 +145,7 @@ read.prestage<-function(ocs, tables, rulesFiles=NULL, ...) {
     warning("Seven tables are expected for prestaging, currently only the final tables is read.")
   message(paste("Reading",paste(tables, collapse=",")))
 
-  ps <- get.table.data(ocs,tables[1], rulesFile=rulesFiles[1])
+  ps <- get.table.data(ocs,grep('^ps_',tables, value=T), rulesFile=rulesFiles[1])
 
   # There should not be duplicates in this table...
   dups <- which(with(ps, PS.StudySubjectID %in% names(which(table(PS.StudySubjectID) > 1))))
@@ -191,7 +191,7 @@ read.therapy<-function(ocs, tables, rulesFiles=NULL, ...) {
     warning("Seven tables are expected for therapy, currently only the primary table is read.")
   message(paste("Reading",paste(tables, collapse=",")))
 
-  tr <- get.table.data(ocs,tables[1], uniqueID=2, rulesFile=rulesFiles[1])
+  tr <- get.table.data(ocs,grep('^tr_', tables, value=T), uniqueID=2, rulesFile=rulesFiles[1])
   dups <- which(with(tr, TR.StudySubjectID %in% names(which(table(TR.StudySubjectID) > 1))))
 
   # Currently there's nothing in the other tables
@@ -252,7 +252,16 @@ read.surgery<-function(ocs, table, rulesFile=NULL, ...) {
     stop("Create connection to OCCAMS Labkey first")
   message(paste("Reading",table))
 
-  st <- get.table.data(ocs=ocs, table=table, uniqueID=2, rulesFile=rulesFile, ...)
+  #st <- get.table.data(ocs=ocs, table=table, uniqueID=2, rulesFile=rulesFile, ...)
+
+  st <- get.table.data(ocs,table, rulesFile=rulesFile)
+
+  # There should not be duplicates in this table...
+  dups <- which(duplicated(st[,2]))
+  duplicatePts <- st[dups,]
+
+  st <- st[-dups, ]
+  st <- rows.as.patient.id(st, 2)
 
   st$ST.SurgeryPerformed <- with(st, ifelse (ST.MainSurgery == 'yes' & (is.na(ST.ReasonIfNoSurgery) | is.na(ST.OtherReasonForNoSurgery)), 'yes', 'no'))
   st$ST.PathologyReportGenerated <- ifelse(with(st,
@@ -276,10 +285,17 @@ read.pathology<-function(ocs, table, rulesFile=NULL, ...) {
     stop("Create connection to OCCAMS Labkey first")
   message(paste("Reading",table))
 
-  rp <- get.table.data(ocs=ocs, table=table, uniqueID=2, rulesFile=rulesFile, ...)
+  rp <- get.table.data(ocs=ocs, table=table, uniqueID=NULL, rulesFile=rulesFile, ...)
+
+  dups <- which(duplicated(rp[,2]))
+  duplicatePts <- rp[dups,]
+
+  rp <- rp[-dups, ]
 
   cols <- grep("Siewert|NumberOf|width|length", colnames(rp), value=T)
   rp[cols] <- lapply(rp[cols], as.numeric)
+
+  rp <- rows.as.patient.id(rp, 2)
 
   rp <- fix.tumor.factors(text.to.tstage(rp))
 
@@ -317,12 +333,13 @@ read.pathology<-function(ocs, table, rulesFile=NULL, ...) {
   return(rp)
 }
 
-read.referral.diagnosis<-function(ocs, table, rulesFile=NULL, ...) {
+read.referral.diagnosis<-function(ocs, tables, rulesFile=NULL, ...) {
   if (!inherits(ocs, "OCCAMSLabkey"))
     stop("Create connection to OCCAMS Labkey first")
-  message(paste("Reading",table))
+  message(paste("Reading",tables))
 
-  rd <- get.table.data(ocs=ocs, table=table, uniqueID=2, rulesFile=rulesFile, ...)
+  #rd <- get.table.data(ocs=ocs, table=table, uniqueID=2, rulesFile=rulesFile, ...)
+  rd <- get.table.data(ocs,grep('^rd_', tables, value=T), uniqueID=2, rulesFile=rulesFile, ...)
 
   rd$RD.SiewertClassification <- ordered(rd$RD.SiewertClassification, levels=c(1,2,3))
 
@@ -466,6 +483,7 @@ download.all.tables<-function(ocs, prefixes=c('di','rd','ex','ps','tp','tr','st'
   message("Creating final patient table")
   # Merge final table
   all <- merge.patient.tables(di, fe, all=T)
+  all <- merge.patient.tables(all, tp, all=T)
   all <- merge.patient.tables(all, rd, all=T)
   all <- merge.patient.tables(all, ex, all=T)
   all <- merge.patient.tables(all, ps, all=T)

@@ -8,8 +8,11 @@ Downloading LabKey information from the OCCAMS database.
 
 ### How do I get set up? ###
 
+IMPORTANT
+Until the OCCAMS LabKey server is updated to >v.16 the version of Rlabkey must NOT be >=2.2  
+
 Install R library from source
-* plyr, RCurl, Rlabkey
+* plyr, RCurl, Rlabkey v. 2.1.136
 
 Create a file with the following fields:
 

@@ -12,5 +12,6 @@ LazyData: true
 Imports:
   plyr,
   RCurl,
-  Rlabkey,
+  Rlabkey (<= 2.1.136),
+  data.table
 Suggests: testthat

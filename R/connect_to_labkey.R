@@ -1,7 +1,9 @@
 
 create.session<-function(url="https://occams.comlab.ox.ac.uk/labkey", path="/ICGC/Cohorts/All Study Subjects", user, pwd) {
   require(Rlabkey)
-  ssc <- Rlabkey::labkey.acceptSelfSignedCerts()
+#  ssc <- Rlabkey::labkey.acceptSelfSignedCerts()
+  #labkey.setCurlOptions(ssl_verifypeer=FALSE, ssl_verifyhost=FALSE)
+  #labkey.setDefaults(apiKey="session|abcdef0123456789abcdef0123456789")
   session <- Rlabkey::getSession(baseUrl=url,
                      folderPath=path,
                      curlOptions= RCurl::curlOptions(userpwd=paste(user,pwd,sep=":")),
@@ -15,7 +17,7 @@ connect.to.labkey<-function(file="~/.labkey.cred") {
 
   vars <- read.csv(file, header=F, sep="=", row.names=1, stringsAsFactors=F)
 
-  return(create.connection(url=vars['url',], path=vars['path',], vars['user',], vars['pwd',]))
+  return(create.connection(url=vars['url',], path=vars['path',], user=vars['user',], pwd=vars['pwd',]))
 }
 
 create.connection<-function(url="https://occams.comlab.ox.ac.uk/labkey", path="/ICGC/Cohorts/All Study Subjects", user, pwd) {
@@ -66,9 +68,10 @@ rows.as.patient.id<-function(rows, uniqueID=NULL) {
   return(rows)
 }
 
-read.table.data<-function(f, table, columns=NULL, uniqueID=NULL, rulesFile=NULL, ...) {
+read.table.data<-function(f, columns=NULL, uniqueID=NULL, rulesFile=NULL, ...) {
+  require(data.table)
 
-  rows <- read.table(f, stringsAsFactors=F, sep="\t", header=T, quote="")
+  rows <- as.data.frame(data.table::fread(f, stringsAsFactors=F, sep="\t", header=T, quote='"'))
   rows <- clean.rows(rows, uniqueID, rulesFile)
 
   return(rows)

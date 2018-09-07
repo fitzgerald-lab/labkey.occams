@@ -45,7 +45,7 @@ read.demographics<-function(ocs, table, rulesFile=NULL, ...) {
     message(paste("Reading",table))
     di <- get.table.data(ocs=ocs, table=table, uniqueID=2, rulesFile=rulesFile, ...)
   } else {
-    di <- read.table.data(ocs, table, uniqueID=1, rulesFile=rulesFile)
+    di <- read.table.data(table, uniqueID=2, rulesFile=rulesFile)
   }
 
   #di$DI.ageAtDiagnosis <- as.numeric(di$DI.ageAtDiagnosis)
@@ -56,16 +56,22 @@ read.demographics<-function(ocs, table, rulesFile=NULL, ...) {
   return(di)
 }
 
-# TODO set this up to read from a file dump instead
 read.exposures<-function(ocs, tables, rulesFiles=NULL, ...) {
-  if (!inherits(ocs, "OCCAMSLabkey")) {
-    stop("Create connection to OCCAMS Labkey first")
-  }
-  if (length(tables) < 3)
+  if (length(tables) != 3)
     stop("Three tables expected for exposures")
-  message(paste("Reading",paste(tables, collapse=",")))
 
-  ex <- get.table.data(ocs=ocs, table=tables[1], uniqueID=2, rulesFile=rulesFiles[1], ...)
+  if (inherits(ocs, "OCCAMSLabkey")) {
+    #stop("Create connection to OCCAMS Labkey first")
+    message(paste("Reading",paste(tables, collapse=',')))
+    ex <- get.table.data(ocs=ocs, table=tables[1], uniqueID=2, rulesFile=rulesFiles[1], ...)
+    ex_history_gastric <- get.table.data(ocs=ocs, table=tables[2], rulesFile=rulesFiles[2], ...)
+    ex_history_other <- get.table.data(ocs=ocs, table=tables[3], rulesFile=rulesFiles[3], ...)
+
+  } else {
+    ex <- read.table.data(tables[1], uniqueID=2, rulesFile=rulesFiles[1])
+    ex_history_gastric <- read.table.data(tables[2], rulesFile=rulesFiles[2])
+    ex_history_other <- read.table.data(tables[3], rulesFile=rulesFiles[3])
+  }
 
   cols <- grep('Height|Weight|BMI|Weeks|Months|Years|Days', colnames(ex), value=T)
   ex[cols] <- lapply(ex[cols], as.numeric)
@@ -80,9 +86,6 @@ read.exposures<-function(ocs, tables, rulesFiles=NULL, ...) {
     return(bmi)
   })
 
-  ex_history_gastric <- get.table.data(ocs=ocs, table=tables[2], rulesFile=rulesFiles[2], ...)
-  head(ex_history_gastric)
-
   ex$EX.FamilyHistory.OGC.Relationship <- NA
   ex[unique(subset(ex_history_gastric, EX1.FamilyHistoryOfOesophagoGastricCancerRelationship %in% c('Brother', 'Sister'), select = EX1.StudySubjectID)[,1]), 'EX.FamilyHistory.OGC.Relationship'] <- "Sibling"
 
@@ -94,8 +97,6 @@ read.exposures<-function(ocs, tables, rulesFiles=NULL, ...) {
 
   ex$EX.FamilyHistory.OGC.Relationship = ordered(ex$EX.FamilyHistory.OGC.Relationship, levels=c('Sibling','Parent','Au.Unc.Grand','Cousin'))
 
-  ex_history_other <- get.table.data(ocs=ocs, table=tables[3], rulesFile=rulesFiles[3], ...)
-
   message(paste(nrow(ex), "patients"))
 
   return(ex)
@@ -103,20 +104,28 @@ read.exposures<-function(ocs, tables, rulesFiles=NULL, ...) {
 
 read.endpoints<-function(ocs, tables, rulesFiles=NULL, ...) {
   require(plyr)
-  if (!inherits(ocs, "OCCAMSLabkey"))
-    stop("Create connection to OCCAMS Labkey first")
-  if (length(tables) < 2)
-    stop("Two tables are expected for endpoints")
-  message(paste("Reading",paste(tables, collapse=",")))
+
+  if (length(tables) != 2)
+    stop("Two tables expected for endpoints")
+
+  if (inherits(ocs, "OCCAMSLabkey")) {
+    #stop("Create connection to OCCAMS Labkey first")
+    message(paste("Reading",paste(tables, collapse=",")))
+
+    fe <- get.table.data(ocs,tables[1], uniqueID=2, rulesFile=rulesFiles[1], ...)
+    fe2 <- get.table.data(ocs,tables[2], rulesFile=rulesFiles[2], ...)
+    fe2 <- ddply( ddply(fe2, .(FE1.StudySubjectID), arrange, desc(FE1.DateOfUpdate)),
+                  .(FE1.StudySubjectID, FE1.StudySite), plyr::summarise, FE1.DateOfUpdate=FE1.DateOfUpdate[1], FE1.ReasonForFollowUp=FE1.ReasonForFollowUp[1], FE1.HasOriginalDiseaseReoccurred=FE1.HasOriginalDiseaseReoccurred[1])
+  } else {
+    message(paste("Reading",paste(basename(tables), collapse=", ")))
+
+    fe <- read.table.data(tables[1], uniqueID=2, rulesFile=rulesFiles[1])
+    fe2 <- read.table.data(tables[2], rulesFile=rulesFiles[2])
+    fe2 <- ddply( ddply(fe2, .(FE1.StudySubjectID), arrange, desc(FE1.DateOfUpdate)),
+                  .(FE1.StudySubjectID, FE1.StudySite), plyr::summarise, FE1.DateOfUpdate=FE1.DateOfUpdate[1], FE1.ReasonForFollowUp=FE1.ReasonForFollowUp[1], FE1.HasOriginalDiseaseReoccurred=FE1.HasOriginalDiseaseReoccurred[1])
+  }
 
   # Final endpoint
-  fe <- get.table.data(ocs,tables[1], uniqueID=2, rulesFile=rulesFiles[1], ...)
-
-  fe2 <- get.table.data(ocs,tables[2], rulesFile=rulesFiles[2], ...)
-
-  fe2 <- ddply( ddply(fe2, .(FE1.StudySubjectID), arrange, desc(FE1.DateOfUpdate)),
-                .(FE1.StudySubjectID, FE1.StudySite), plyr::summarise, FE1.DateOfUpdate=FE1.DateOfUpdate[1], FE1.ReasonForFollowUp=FE1.ReasonForFollowUp[1], FE1.HasOriginalDiseaseReoccurred=FE1.HasOriginalDiseaseReoccurred[1])
-
   rownames(fe2) = fe2$FE1.StudySubjectID
 
   feF <- merge.patient.tables(fe,fe2, all=T)
@@ -139,13 +148,16 @@ read.endpoints<-function(ocs, tables, rulesFiles=NULL, ...) {
 }
 
 read.prestage<-function(ocs, tables, rulesFiles=NULL, ...) {
-  if (!inherits(ocs, "OCCAMSLabkey"))
-    stop("Create connection to OCCAMS Labkey first")
-  if (length(tables) < 7)
+  if (length(tables) != 7)
     warning("Seven tables are expected for prestaging, currently only the final tables is read.")
-  message(paste("Reading",paste(tables, collapse=",")))
 
-  ps <- get.table.data(ocs,grep('^ps_',tables, value=T), rulesFile=rulesFiles[1])
+  if (inherits(ocs, "OCCAMSLabkey")) {
+    #stop("Create connection to OCCAMS Labkey first")
+    message(paste("Reading",paste(tables, collapse=",")))
+    ps <- get.table.data(ocs,grep('^ps_',tables, value=T), rulesFile=rulesFiles[1])
+  } else {
+    ps <- read.table.data(tables[grep('^ps_',basename(tables))], rulesFile=rulesFiles[1])
+  }
 
   # There should not be duplicates in this table...
   dups <- which(with(ps, PS.StudySubjectID %in% names(which(table(PS.StudySubjectID) > 1))))
@@ -162,16 +174,17 @@ read.prestage<-function(ocs, tables, rulesFiles=NULL, ...) {
 }
 
 read.treatment.plan<-function(ocs, tables, rulesFiles=NULL, ...) {
-  if (!inherits(ocs, "OCCAMSLabkey"))
-    stop("Create connection to OCCAMS Labkey first")
   if (length(tables) < 2)
     stop("Two tables are expected for treatment plans, currently using only primary table.")
-  message(paste("Reading",paste(tables, collapse=",")))
 
-  tp <- get.table.data(ocs=ocs, table=tables[1], rulesFile=rulesFiles[1], ...)
-
-  tp1 <- get.table.data(ocs=ocs, table=tables[2], rulesFile=rulesFiles[2], ...)
-
+  if (inherits(ocs, "OCCAMSLabkey")) {
+    message(paste("Reading",paste(tables, collapse=",")))
+    tp <- get.table.data(ocs=ocs, table=tables[1], rulesFile=rulesFiles[1], ...)
+    tp1 <- get.table.data(ocs=ocs, table=tables[2], rulesFile=rulesFiles[2], ...)
+  } else {
+    tp <- read.table.data(tables[1], rulesFile=rulesFiles[1])
+    tp1 <- read.table.data(tables[2], rulesFile=rulesFiles[2])
+  }
   # There should not be duplicates in this table...
   dups <- which(with(tp, TP.StudySubjectID %in% names(which(table(TP.StudySubjectID) > 1))))
   duplicatePts <- tp[dups,]
@@ -185,13 +198,16 @@ read.treatment.plan<-function(ocs, tables, rulesFiles=NULL, ...) {
 }
 
 read.therapy<-function(ocs, tables, rulesFiles=NULL, ...) {
-  if (!inherits(ocs, "OCCAMSLabkey"))
-    stop("Create connection to OCCAMS Labkey first")
   if (length(tables) < 7)
     warning("Seven tables are expected for therapy, currently only the primary table is read.")
-  message(paste("Reading",paste(tables, collapse=",")))
 
-  tr <- get.table.data(ocs,grep('^tr_', tables, value=T), uniqueID=2, rulesFile=rulesFiles[1])
+    if (inherits(ocs, "OCCAMSLabkey")) {
+      message(paste("Reading",paste(tables, collapse=",")))
+      tr <- get.table.data(ocs,grep('^tr_', tables, value=T), uniqueID=2, rulesFile=rulesFiles[1])
+    } else {
+      tr <- read.table.data(tables[grep('^tr_', basename(tables))], uniqueID=2, rulesFile=rulesFiles[1])
+    }
+
   dups <- which(with(tr, TR.StudySubjectID %in% names(which(table(TR.StudySubjectID) > 1))))
 
   # Currently there's nothing in the other tables
@@ -248,14 +264,12 @@ read.therapy<-function(ocs, tables, rulesFiles=NULL, ...) {
 }
 
 read.surgery<-function(ocs, table, rulesFile=NULL, ...) {
-  if (!inherits(ocs, "OCCAMSLabkey"))
-    stop("Create connection to OCCAMS Labkey first")
-  message(paste("Reading",table))
-
-  #st <- get.table.data(ocs=ocs, table=table, uniqueID=2, rulesFile=rulesFile, ...)
-
-  st <- get.table.data(ocs,table, rulesFile=rulesFile)
-
+  if (inherits(ocs, "OCCAMSLabkey")) {
+    message(paste("Reading",table))
+    st <- get.table.data(ocs,table, rulesFile=rulesFile)
+  } else {
+    st <- read.table.data(table, rulesFile=rulesFile)
+  }
   # There should not be duplicates in this table...
   dups <- which(duplicated(st[,2]))
   duplicatePts <- st[dups,]
@@ -281,11 +295,12 @@ read.surgery<-function(ocs, table, rulesFile=NULL, ...) {
 read.pathology<-function(ocs, table, rulesFile=NULL, ...) {
   require(plyr)
 
-  if (!inherits(ocs, "OCCAMSLabkey"))
-    stop("Create connection to OCCAMS Labkey first")
-  message(paste("Reading",table))
-
-  rp <- get.table.data(ocs=ocs, table=table, uniqueID=NULL, rulesFile=rulesFile, ...)
+  if (inherits(ocs, "OCCAMSLabkey")) {
+    message(paste("Reading",table))
+    rp <- get.table.data(ocs=ocs, table=table, uniqueID=NULL, rulesFile=rulesFile, ...)
+  } else {
+    rp <- read.table.data(table, uniqueID=NULL, rulesFile=rulesFile)
+  }
 
   dups <- which(duplicated(rp[,2]))
   duplicatePts <- rp[dups,]
@@ -334,17 +349,15 @@ read.pathology<-function(ocs, table, rulesFile=NULL, ...) {
 }
 
 read.referral.diagnosis<-function(ocs, tables, rulesFile=NULL, ...) {
-  if (!inherits(ocs, "OCCAMSLabkey"))
-    stop("Create connection to OCCAMS Labkey first")
-  message(paste("Reading",tables))
-
-  #rd <- get.table.data(ocs=ocs, table=table, uniqueID=2, rulesFile=rulesFile, ...)
-  rd <- get.table.data(ocs,grep('^rd_', tables, value=T), uniqueID=2, rulesFile=rulesFile, ...)
-
+  if (inherits(ocs, "OCCAMSLabkey")) {
+    message(paste("Reading",tables))
+    rd <- get.table.data(ocs,grep('^rd_', tables, value=T), uniqueID=2, rulesFile=rulesFile, ...)
+  } else {
+    rd <- read.table.data(tables[grep('^rd_', basename(tables))], uniqueID=2, rulesFile=rulesFile)
+  }
   rd$RD.SiewertClassification <- ordered(rd$RD.SiewertClassification, levels=c(1,2,3))
 
   message(paste(nrow(rd), "patients"))
-
   return(rd)
 }
 
@@ -439,25 +452,17 @@ clean.missing<-function(df, missing) {
   return(df)
 }
 
-read.all.tables<-function(dir, prefixes=c('di','rd','ex','ps','tp','tr','st','rp','fe','tc'), missing=NULL) {
-  require(plyr)
-
-
-
-}
-
-
 download.all.tables<-function(ocs, prefixes=c('di','rd','ex','ps','tp','tr','st','rp','fe','tc'), missing=NULL) {
   require(plyr)
 
   if (inherits(ocs, "OCCAMSLabkey")) {
     tables = list.clinical.tables(ocs, prefixes)
   } else {
-    tables = list.files(ocs)
+    tables = list.files(ocs, full.names=T)
   }
 
   ordered_tables = sapply(prefixes, function(x) {
-    sort(grep(paste("^",x,sep=""), tables, value=T))
+    tables[sort(grep(paste("^",x,sep=""), basename(tables)))]
   })
 
   di <- clean.missing(
@@ -562,8 +567,8 @@ prestage.to.path<-function(df) {
   return(df)
 }
 
+# Currently not in use due to possible introduced biases
 remove.bad.dates<-function(df) {
-
   #Diagnosis
   fixRows = which(with(df, is.na(RD.DateOfOGCDiagnosis)))
   message(paste(length(fixRows), "patients missing diagnosis date, fixing to consent date"))

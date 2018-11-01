@@ -7,7 +7,7 @@ read.tissue.collection<-function(ocs, tables, rulesFiles=NULL, ...) {
   message(paste("Reading",paste(tables, collapse=",")))
 
   # all this table tells me is if there should be entries in the second table or not
-  tc <- get.table.data(ocs=ocs, table=tables[1], ...)
+  tc <- get.table.data(ocs=ocs, table=grep('tc_',tables,value=T), ...)
 
   # There should not be duplicates in this table...
   dups <- which(with(tc, TC.StudySubjectID %in% names(which(table(TC.StudySubjectID) > 1))))
@@ -20,7 +20,7 @@ read.tissue.collection<-function(ocs, tables, rulesFiles=NULL, ...) {
   samplesTaken <- rownames(subset(tc,TC.TissueSamplesTaken == "Yes"))
 
   # useful table
-  tc1 <- get.table.data(ocs=ocs, table=tables[2])
+  tc1 <- get.table.data(ocs=ocs, table=grep('tc1_',tables,value=T))
 
   # But it seems the two tables may not actually match up! There are more patients in the second table then are listed in the first as having had tissue taken
   missingEntries <- setdiff(unique(tc1$TC1.StudySubjectID), samplesTaken)
@@ -63,9 +63,9 @@ read.exposures<-function(ocs, tables, rulesFiles=NULL, ...) {
   if (inherits(ocs, "OCCAMSLabkey")) {
     #stop("Create connection to OCCAMS Labkey first")
     message(paste("Reading",paste(tables, collapse=',')))
-    ex <- get.table.data(ocs=ocs, table=tables[1], uniqueID=2, rulesFile=rulesFiles[1], ...)
-    ex_history_gastric <- get.table.data(ocs=ocs, table=tables[2], rulesFile=rulesFiles[2], ...)
-    ex_history_other <- get.table.data(ocs=ocs, table=tables[3], rulesFile=rulesFiles[3], ...)
+    ex <- get.table.data(ocs=ocs, table=grep('^ex_',tables,value=T), uniqueID=2, rulesFile=rulesFiles[1], ...)
+    ex_history_gastric <- get.table.data(ocs=ocs, table=grep('ex.*gastric',tables,value=T), rulesFile=rulesFiles[2], ...)
+    ex_history_other <- get.table.data(ocs=ocs, table=grep('ex.*other_cancer',tables,value=T), rulesFile=rulesFiles[3], ...)
 
   } else {
     ex <- read.table.data(tables[1], uniqueID=2, rulesFile=rulesFiles[1])
@@ -112,17 +112,17 @@ read.endpoints<-function(ocs, tables, rulesFiles=NULL, ...) {
     #stop("Create connection to OCCAMS Labkey first")
     message(paste("Reading",paste(tables, collapse=",")))
 
-    fe <- get.table.data(ocs,tables[1], uniqueID=2, rulesFile=rulesFiles[1], ...)
-    fe2 <- get.table.data(ocs,tables[2], rulesFile=rulesFiles[2], ...)
+    fe <- get.table.data(ocs,grep('fe_',tables,value=T), uniqueID=2, rulesFile=rulesFiles[1], ...)
+    fe2 <- get.table.data(ocs,grep('fe1',tables,value=T), rulesFile=rulesFiles[2], ...)
     fe2 <- ddply( ddply(fe2, .(FE1.StudySubjectID), arrange, desc(FE1.DateOfUpdate)),
                   .(FE1.StudySubjectID, FE1.StudySite), plyr::summarise, FE1.DateOfUpdate=FE1.DateOfUpdate[1], FE1.ReasonForFollowUp=FE1.ReasonForFollowUp[1], FE1.HasOriginalDiseaseReoccurred=FE1.HasOriginalDiseaseReoccurred[1])
   } else {
     message(paste("Reading",paste(basename(tables), collapse=", ")))
 
-    fe <- read.table.data(tables[1], uniqueID=2, rulesFile=rulesFiles[1])
-    fe2 <- read.table.data(tables[2], rulesFile=rulesFiles[2])
-    fe2 <- ddply( ddply(fe2, .(FE1.StudySubjectID), arrange, desc(FE1.DateOfUpdate)),
-                  .(FE1.StudySubjectID, FE1.StudySite), plyr::summarise, FE1.DateOfUpdate=FE1.DateOfUpdate[1], FE1.ReasonForFollowUp=FE1.ReasonForFollowUp[1], FE1.HasOriginalDiseaseReoccurred=FE1.HasOriginalDiseaseReoccurred[1])
+    #fe <- read.table.data(tables[1], uniqueID=2, rulesFile=rulesFiles[1])
+    #fe2 <- read.table.data(tables[2], rulesFile=rulesFiles[2])
+    #fe2 <- ddply( ddply(fe2, .(FE1.StudySubjectID), arrange, desc(FE1.DateOfUpdate)),
+    #              .(FE1.StudySubjectID, FE1.StudySite), plyr::summarise, FE1.DateOfUpdate=FE1.DateOfUpdate[1], FE1.ReasonForFollowUp=FE1.ReasonForFollowUp[1], FE1.HasOriginalDiseaseReoccurred=FE1.HasOriginalDiseaseReoccurred[1])
   }
 
   # Final endpoint
@@ -179,11 +179,11 @@ read.treatment.plan<-function(ocs, tables, rulesFiles=NULL, ...) {
 
   if (inherits(ocs, "OCCAMSLabkey")) {
     message(paste("Reading",paste(tables, collapse=",")))
-    tp <- get.table.data(ocs=ocs, table=tables[1], rulesFile=rulesFiles[1], ...)
-    tp1 <- get.table.data(ocs=ocs, table=tables[2], rulesFile=rulesFiles[2], ...)
+    tp <- get.table.data(ocs=ocs, table=grep('tp_',tables,value=T), rulesFile=rulesFiles[1], ...)
+    tp1 <- get.table.data(ocs=ocs, table=grep('tp1_',tables,value=T), rulesFile=rulesFiles[2], ...)
   } else {
-    tp <- read.table.data(tables[1], rulesFile=rulesFiles[1])
-    tp1 <- read.table.data(tables[2], rulesFile=rulesFiles[2])
+    #tp <- read.table.data(tables[1], rulesFile=rulesFiles[1])
+    #tp1 <- read.table.data(tables[2], rulesFile=rulesFiles[2])
   }
   # There should not be duplicates in this table...
   dups <- which(with(tp, TP.StudySubjectID %in% names(which(table(TP.StudySubjectID) > 1))))
@@ -338,6 +338,14 @@ read.pathology<-function(ocs, table, rulesFile=NULL, ...) {
   rp$RP.BarrettsAdjacent = 0
   rp[which(as.integer(with(rp, RP.BarettsAdjacentToTumourMicroscopicIM == 'yes' | RP.BarettsAdjacentToTumourMacroscopic == 'yes')) == 1), 'RP.BarrettsAdjacent'] = 1
 
+  message("Updating Caitron's patients for RP.BarrettsAdjacent")
+  be_updates = readr::read_tsv(system.file("extdata", "be_updates_20160930.txt", package="openclinica.occams"))
+  be_updates = be_updates %>% dplyr::mutate( `Barret's Confirmed`=ifelse(`Barret's Confirmed` == '?', NA, `Barret's Confirmed`) )
+  be_updates$`Barret's Confirmed` = as.integer(as.factor(be_updates$`Barret's Confirmed`))-1
+
+  # Assume Caitron's are the final say (they matched other than NA anyhow)
+  rp[be_updates$`OCCAMS/ID`,'RP.BarrettsAdjacent'] = be_updates$`Barret's Confirmed`
+
   rp$RP.BarrettsAdjacent <- revalue(as.factor(rp$RP.BarrettsAdjacent), reg)
 
   cols = c('RP.Nstage.RP.TNMSystem', 'RP.Nstage.RP.TNM6')
@@ -464,6 +472,10 @@ download.all.tables<-function(ocs, prefixes=c('di','rd','ex','ps','tp','tr','st'
   ordered_tables = sapply(prefixes, function(x) {
     tables[sort(grep(paste("^",x,sep=""), basename(tables)))]
   })
+
+  di <- clean.missing(
+    read.demographics(ocs, ordered_tables$di, NULL),NULL )
+
 
   di <- clean.missing(
       read.demographics(ocs, ordered_tables$di, rulesFile=paste(path.package('openclinica.occams')[1], "editrules/di_editrules.txt", sep='/')),

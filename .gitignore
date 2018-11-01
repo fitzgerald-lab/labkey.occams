@@ -1,5 +1,11 @@
-# Add any directories, files, or patterns you don't want to be tracked by version control
-*.Rdata
-*.Rhistory
+*.gitignore
+*.pdf
 *.Rproj
+*.Rproj.user
+*.Rhistory
+*.RData
+*.Ruserdata
+*.png
+*.txt
 .Rproj.user
+packrat/lib*/

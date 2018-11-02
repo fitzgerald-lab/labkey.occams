@@ -338,13 +338,16 @@ read.pathology<-function(ocs, table, rulesFile=NULL, ...) {
   rp$RP.BarrettsAdjacent = 0
   rp[which(as.integer(with(rp, RP.BarettsAdjacentToTumourMicroscopicIM == 'yes' | RP.BarettsAdjacentToTumourMacroscopic == 'yes')) == 1), 'RP.BarrettsAdjacent'] = 1
 
-  message("Updating Caitron's patients for RP.BarrettsAdjacent")
-  be_updates = readr::read_tsv(system.file("extdata", "be_updates_20160930.txt", package="openclinica.occams"))
-  be_updates = be_updates %>% dplyr::mutate( `Barret's Confirmed`=ifelse(`Barret's Confirmed` == '?', NA, `Barret's Confirmed`) )
-  be_updates$`Barret's Confirmed` = as.integer(as.factor(be_updates$`Barret's Confirmed`))-1
 
-  # Assume Caitron's are the final say (they matched other than NA anyhow)
-  rp[be_updates$`OCCAMS/ID`,'RP.BarrettsAdjacent'] = be_updates$`Barret's Confirmed`
+  file = system.file("extdata", "be_updates_20160930.txt", package="openclinica.occams")
+  if (!is.null(file) & file.exists(file)) {
+    message("Updating Caitron's patients for RP.BarrettsAdjacent")
+    be_updates = readr::read_tsv(file)
+    be_updates = be_updates %>% dplyr::mutate( `Barret's Confirmed`=ifelse(`Barret's Confirmed` == '?', NA, `Barret's Confirmed`) )
+    be_updates$`Barret's Confirmed` = as.integer(as.factor(be_updates$`Barret's Confirmed`))-1
+    # Assume Caitron's are the final say (they matched other than NA anyhow)
+    rp[be_updates$`OCCAMS/ID`,'RP.BarrettsAdjacent'] = be_updates$`Barret's Confirmed`
+  }
 
   rp$RP.BarrettsAdjacent <- revalue(as.factor(rp$RP.BarrettsAdjacent), reg)
 

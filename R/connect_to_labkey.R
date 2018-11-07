@@ -48,8 +48,7 @@ get.prefixes<-function(ocs, version='z1') {
   return(unique(sapply(grep(version, names(ocs$schema), value=T), substr, 1, 2)))
 }
 
-list.clinical.tables<-function(ocs, prefixes=NULL,
-                               versions='z1' ) {
+list.clinical.tables<-function(ocs, prefixes=NULL, versions='z1' ) {
   if (is.null(prefixes))
     prefixes = get.prefixes(ocs,versions)
 
@@ -121,9 +120,6 @@ clean.na<-function(df, text=c('not_recorded','not recorded', 'not assessed', 'un
   return( lapply(df[], function(x) { ifelse(grepl(paste(text, collapse="|"), x, ignore.case=T), NA, x) }) )
 }
 
-trim<-function(x) {
-   gsub("^\\s+|\\s+$", "", x)
-}
 
 editrules<-function(file, df) {
   if (!file.exists(file))

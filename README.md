@@ -15,7 +15,7 @@ _IMPORTANT NOTE:_ Until the OCCAMS LabKey server is updated to v.16 or above, th
 
 Create a file with the following fields:
 
-```
+```R
  url=https://occams.comlab.ox.ac.uk/labkey
  path=/ICGC/Cohorts/All Study Subjects
  user=MyUser
@@ -35,7 +35,9 @@ All of the labkey tables will be merged into a wide table with a single row per 
 
 Note that the default credential file path is ~/.labkey.cred so if you put it there, no need to provide the file path
 
-```
+```R
+
+library(openclinica.occams)
 
 ocs <- connect.to.labkey(file='labkey.creds') 
 occams <- download.all.tables(ocs)

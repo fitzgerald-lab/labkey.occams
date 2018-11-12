@@ -45,6 +45,16 @@ occams <- download.all.tables(ocs)
 head(occams$patients)
 head(occams$tissues)
 
+
+## OR if you have a list of OCCAMS identifiers
+
+occams <- get.patients(ocs, occams_ids)
+occams$incorrect_ids
+head(occams$patients)
+head(occams$tissues)
+
+
+
 ```
 
 

@@ -1,26 +1,35 @@
 
-read.tissue.collection<-function(ocs, tables, rulesFiles=NULL, ...) {
+read.tissue.collection<-function(ocs, tables, rulesFiles=NULL, occams_ids=NULL, verbose=F, ...) {
+  z = list(...)
+  verbose = ifelse (!is.null(z$verbose), z$verbose, F)
+
+  tables = list.clinical.tables(ocs,'tc')
+
+  filter = make.id.filter(occams_ids, 'TC_StudySubjectID')
+
   if (!inherits(ocs, "OCCAMSLabkey"))
     stop("Create connection to OCCAMS Labkey first")
   if (length(tables) < 2)
     stop("Two tables are expected for tissue collection")
-  message(paste("Reading",paste(tables, collapse=",")))
+
+  if (verbose) message(paste("Reading",paste(tables, collapse=",")))
 
   # all this table tells me is if there should be entries in the second table or not
-  tc <- get.table.data(ocs=ocs, table=grep('tc_',tables,value=T), ...)
+  tc <- get.table.data(ocs=ocs, table=grep('^tc_',tables,value=T), colFilter=filter)
 
   # There should not be duplicates in this table...
   dups <- which(with(tc, TC.StudySubjectID %in% names(which(table(TC.StudySubjectID) > 1))))
   duplicatePts <- tc[dups,]
 
   warning(paste("Removing", nrow(duplicatePts), "duplicated patient rows"))
-  tc <- tc[-dups, ]
+  if (length(dups) > 0) tc <- tc[-dups, ]
   tc <- rows.as.patient.id(tc, 2)
 
   samplesTaken <- rownames(subset(tc,TC.TissueSamplesTaken == "Yes"))
 
   # useful table
-  tc1 <- get.table.data(ocs=ocs, table=grep('tc1_',tables,value=T))
+  filter = make.id.filter(occams_ids, 'TC1_StudySubjectID')
+  tc1 <- get.table.data(ocs=ocs, table=grep('^tc1_',tables,value=T), colFilter=filter)
 
   # But it seems the two tables may not actually match up! There are more patients in the second table then are listed in the first as having had tissue taken
   missingEntries <- setdiff(unique(tc1$TC1.StudySubjectID), samplesTaken)
@@ -34,16 +43,30 @@ read.tissue.collection<-function(ocs, tables, rulesFiles=NULL, ...) {
   names(sources) <- c('N','B','T','G','L','M')
   tc1$TC1.TissueSource <- revalue(tc1$TC1.TissueSource, sources)
 
-  message(paste(nrow(tc1), "samples"))
+  if (verbose) message(paste(nrow(tc1), "samples"))
 
   return(tc1)
 }
 
-read.demographics<-function(ocs, table, rulesFile=NULL, ...) {
+make.id.filter<-function(occams_ids, idCol) {
+  if (!is.null(occams_ids)) {
+    occams_ids = grep('^OCCAMS/[A-Z]{2}/[0-9]+', occams_ids, value=T)
+    return( makeFilter(c(idCol, 'IN', paste(occams_ids, collapse=';'))) )
+  }
+  return(NULL)
+}
+
+read.demographics<-function(ocs, table, occams_ids=NULL, rulesFile=NULL, ...) {
+  table = list.clinical.tables(ocs,'di')
+  z = list(...)
+  verbose = ifelse (!is.null(z$verbose), z$verbose, F)
+
+  filter = make.id.filter(occams_ids,'DI_StudySubjectID')
+
   if (inherits(ocs, "OCCAMSLabkey")) {
     #stop("Create connection to OCCAMS Labkey first")
-    message(paste("Reading",table))
-    di <- get.table.data(ocs=ocs, table=table, uniqueID=2, rulesFile=rulesFile, ...)
+    if (verbose) message(paste("Reading",table))
+    di <- get.table.data(ocs=ocs, table=table, uniqueID=2, rulesFile=rulesFile, colFilter=filter)
   } else {
     di <- read.table.data(table, uniqueID=2, rulesFile=rulesFile)
   }
@@ -52,20 +75,29 @@ read.demographics<-function(ocs, table, rulesFile=NULL, ...) {
   # Prefer to get this from FE tables
   di$DI.PatientDateOfDeath = NULL
 
-  message(paste(nrow(di), "patients"))
+  if (verbose) message(paste(nrow(di), "patients"))
   return(di)
 }
 
-read.exposures<-function(ocs, tables, rulesFiles=NULL, ...) {
+read.exposures<-function(ocs, tables, occams_ids=NULL, rulesFiles=NULL, ...) {
+  z = list(...)
+  verbose = ifelse (!is.null(z$verbose), z$verbose, F)
+
+  tables = list.clinical.tables(ocs,'ex')
+
   if (length(tables) != 3)
     stop("Three tables expected for exposures")
 
+  filter = make.id.filter(occams_ids,'EX_StudySubjectID')
+  filter1 = make.id.filter(occams_ids,'EX1_StudySubjectID')
+  filter2 = make.id.filter(occams_ids,'EX2_StudySubjectID')
+
   if (inherits(ocs, "OCCAMSLabkey")) {
     #stop("Create connection to OCCAMS Labkey first")
-    message(paste("Reading",paste(tables, collapse=',')))
-    ex <- get.table.data(ocs=ocs, table=grep('^ex_',tables,value=T), uniqueID=2, rulesFile=rulesFiles[1], ...)
-    ex_history_gastric <- get.table.data(ocs=ocs, table=grep('ex.*gastric',tables,value=T), rulesFile=rulesFiles[2], ...)
-    ex_history_other <- get.table.data(ocs=ocs, table=grep('ex.*other_cancer',tables,value=T), rulesFile=rulesFiles[3], ...)
+    if (verbose) message(paste("Reading",paste(tables, collapse=',')))
+    ex <- get.table.data(ocs=ocs, table=grep('^ex_',tables,value=T), uniqueID=2, rulesFile=rulesFiles[1], colFilter=filter)
+    ex_history_gastric <- get.table.data(ocs=ocs, table=grep('ex.*gastric',tables,value=T), rulesFile=rulesFiles[2], colFilter=filter1)
+    ex_history_other <- get.table.data(ocs=ocs, table=grep('ex.*other_cancer',tables,value=T), rulesFile=rulesFiles[3], colFilter=filter2)
 
   } else {
     ex <- read.table.data(tables[1], uniqueID=2, rulesFile=rulesFiles[1])
@@ -97,27 +129,35 @@ read.exposures<-function(ocs, tables, rulesFiles=NULL, ...) {
 
   ex$EX.FamilyHistory.OGC.Relationship = ordered(ex$EX.FamilyHistory.OGC.Relationship, levels=c('Sibling','Parent','Au.Unc.Grand','Cousin'))
 
-  message(paste(nrow(ex), "patients"))
+  if (verbose) message(paste(nrow(ex), "patients"))
 
   return(ex)
 }
 
-read.endpoints<-function(ocs, tables, rulesFiles=NULL, ...) {
+read.endpoints<-function(ocs, tables, occams_ids=NULL, rulesFiles=NULL, ...) {
+  z = list(...)
+  verbose = ifelse (!is.null(z$verbose), z$verbose, F)
+
   require(plyr)
+
+  tables = list.clinical.tables(ocs,'fe')
 
   if (length(tables) != 2)
     stop("Two tables expected for endpoints")
 
+  filter = make.id.filter(occams_ids,'FE_StudySubjectID')
+  filter1 = make.id.filter(occams_ids,'FE1_StudySubjectID')
+
   if (inherits(ocs, "OCCAMSLabkey")) {
     #stop("Create connection to OCCAMS Labkey first")
-    message(paste("Reading",paste(tables, collapse=",")))
+    if (verbose) message(paste("Reading",paste(tables, collapse=",")))
 
-    fe <- get.table.data(ocs,grep('fe_',tables,value=T), uniqueID=2, rulesFile=rulesFiles[1], ...)
-    fe2 <- get.table.data(ocs,grep('fe1',tables,value=T), rulesFile=rulesFiles[2], ...)
+    fe <- get.table.data(ocs,grep('fe_',tables,value=T), uniqueID=2, rulesFile=rulesFiles[1], colFilter=filter)
+    fe2 <- get.table.data(ocs,grep('fe1',tables,value=T), rulesFile=rulesFiles[2], colFilter=filter1)
     fe2 <- ddply( ddply(fe2, .(FE1.StudySubjectID), arrange, desc(FE1.DateOfUpdate)),
                   .(FE1.StudySubjectID, FE1.StudySite), plyr::summarise, FE1.DateOfUpdate=FE1.DateOfUpdate[1], FE1.ReasonForFollowUp=FE1.ReasonForFollowUp[1], FE1.HasOriginalDiseaseReoccurred=FE1.HasOriginalDiseaseReoccurred[1])
   } else {
-    message(paste("Reading",paste(basename(tables), collapse=", ")))
+    if (verbose) message(paste("Reading",paste(basename(tables), collapse=", ")))
 
     #fe <- read.table.data(tables[1], uniqueID=2, rulesFile=rulesFiles[1])
     #fe2 <- read.table.data(tables[2], rulesFile=rulesFiles[2])
@@ -129,12 +169,11 @@ read.endpoints<-function(ocs, tables, rulesFiles=NULL, ...) {
   rownames(fe2) = fe2$FE1.StudySubjectID
 
   feF <- merge.patient.tables(fe,fe2, all=T)
-  #feF <- merge(fe,fe2, by='row.names', all=T)
 
   # withdrawn from study
   rows <- which(with(feF, grepl("withdrawal", FE.EndPoint)))
   withdrawn <- feF[rows,]
-  feF <- feF[-rows,]
+  if (length(rows) > 0) feF <- feF[-rows,]
 
   feF[which(with(feF, FE.EndPoint != 'Patient died' & !is.na(FE.ReasonForPatientDeath))), 'FE.EndPoint'] <- 'Patient died'
 
@@ -142,19 +181,26 @@ read.endpoints<-function(ocs, tables, rulesFiles=NULL, ...) {
 
   feF$FE.Patient.Died <- as.factor(ifelse(feF$FE.EndPoint == 'Patient died' & !is.na(feF$FE.EndPoint), "yes","no"))
 
-  message(paste(nrow(feF), "patients"))
+  if (verbose) message(paste(nrow(feF), "patients"))
 
   return(list('fe'=feF, 'withdrawn'=rownames(withdrawn)))
 }
 
-read.prestage<-function(ocs, tables, rulesFiles=NULL, ...) {
+read.prestage<-function(ocs, tables, occams_ids=NULL, rulesFiles=NULL, ...) {
+  z = list(...)
+  verbose = ifelse (!is.null(z$verbose), z$verbose, F)
+
+  tables = list.clinical.tables(ocs,'ps')
+
   if (length(tables) != 7)
     warning("Seven tables are expected for prestaging, currently only the final tables is read.")
 
+  filter = make.id.filter(occams_ids,'PS_StudySubjectID')
+
   if (inherits(ocs, "OCCAMSLabkey")) {
     #stop("Create connection to OCCAMS Labkey first")
-    message(paste("Reading",paste(tables, collapse=",")))
-    ps <- get.table.data(ocs,grep('^ps_',tables, value=T), rulesFile=rulesFiles[1])
+    if (verbose) message(paste("Reading",paste(tables, collapse=",")))
+    ps <- get.table.data(ocs,grep('^ps_',tables, value=T), rulesFile=rulesFiles[1], colFilter=filter)
   } else {
     ps <- read.table.data(tables[grep('^ps_',basename(tables))], rulesFile=rulesFiles[1])
   }
@@ -163,24 +209,32 @@ read.prestage<-function(ocs, tables, rulesFiles=NULL, ...) {
   dups <- which(with(ps, PS.StudySubjectID %in% names(which(table(PS.StudySubjectID) > 1))))
   duplicatePts <- ps[dups,]
 
-  ps <- ps[-dups, ]
+  if (length(dups) > 0) ps <- ps[-dups, ]
   ps <- rows.as.patient.id(ps, 2)
 
   ps <- fix.tumor.factors(text.to.tstage(ps))
 
-  message(paste(nrow(ps), "patients"))
+  if (verbose) message(paste(nrow(ps), "patients"))
 
   return(list('ps' = ps, 'duplicates' = duplicatePts))
 }
 
-read.treatment.plan<-function(ocs, tables, rulesFiles=NULL, ...) {
+read.treatment.plan<-function(ocs, tables, occams_ids=NULL, rulesFiles=NULL, ...) {
+  z = list(...)
+  verbose = ifelse (!is.null(z$verbose), z$verbose, F)
+
+  tables = list.clinical.tables(ocs,'tp')
+
   if (length(tables) < 2)
     stop("Two tables are expected for treatment plans, currently using only primary table.")
 
+  filter = make.id.filter(occams_ids,'TP_StudySubjectID')
+  filter1 = make.id.filter(occams_ids,'TP1_StudySubjectID')
+
   if (inherits(ocs, "OCCAMSLabkey")) {
-    message(paste("Reading",paste(tables, collapse=",")))
-    tp <- get.table.data(ocs=ocs, table=grep('tp_',tables,value=T), rulesFile=rulesFiles[1], ...)
-    tp1 <- get.table.data(ocs=ocs, table=grep('tp1_',tables,value=T), rulesFile=rulesFiles[2], ...)
+    if (verbose) message(paste("Reading",paste(tables, collapse=",")))
+    tp <- get.table.data(ocs=ocs, table=grep('tp_',tables,value=T), rulesFile=rulesFiles[1], colFilter=filter)
+    tp1 <- get.table.data(ocs=ocs, table=grep('tp1_',tables,value=T), rulesFile=rulesFiles[2], colFilter=filter1)
   } else {
     #tp <- read.table.data(tables[1], rulesFile=rulesFiles[1])
     #tp1 <- read.table.data(tables[2], rulesFile=rulesFiles[2])
@@ -189,32 +243,39 @@ read.treatment.plan<-function(ocs, tables, rulesFiles=NULL, ...) {
   dups <- which(with(tp, TP.StudySubjectID %in% names(which(table(TP.StudySubjectID) > 1))))
   duplicatePts <- tp[dups,]
 
-  tp <- tp[-dups,]
+  if (length(dups) > 0) tp <- tp[-dups,]
   tp <- rows.as.patient.id(tp,2)
 
-  message(paste(nrow(tp), "patients"))
+  if (verbose) message(paste(nrow(tp), "patients"))
 
   return(list('tp'=tp,'duplicates'=duplicatePts))
 }
 
-read.therapy<-function(ocs, tables, rulesFiles=NULL, ...) {
+read.therapy<-function(ocs, tables, occams_ids=NULL, rulesFiles=NULL, ...) {
+  z = list(...)
+  verbose = ifelse (!is.null(z$verbose), z$verbose, F)
+
+  tables = list.clinical.tables(ocs,'tr')
+
   if (length(tables) < 7)
     warning("Seven tables are expected for therapy, currently only the primary table is read.")
 
+    filter = make.id.filter(occams_ids, 'TR_StudySubjectID')
+
     if (inherits(ocs, "OCCAMSLabkey")) {
-      message(paste("Reading",paste(tables, collapse=",")))
-      tr <- get.table.data(ocs,grep('^tr_', tables, value=T), uniqueID=2, rulesFile=rulesFiles[1])
+      if (verbose) message(paste("Reading",paste(tables, collapse=",")))
+      tr <- get.table.data(ocs,grep('^tr_', tables, value=T), uniqueID=2, rulesFile=rulesFiles[1], colFilter=filter)
     } else {
       tr <- read.table.data(tables[grep('^tr_', basename(tables))], uniqueID=2, rulesFile=rulesFiles[1])
     }
 
-  dups <- which(with(tr, TR.StudySubjectID %in% names(which(table(TR.StudySubjectID) > 1))))
+  #dups <- which(with(tr, TR.StudySubjectID %in% names(which(table(TR.StudySubjectID) > 1))))
 
   # Currently there's nothing in the other tables
   #trc <- get.table.data(ocs,tables[3], rulesFile=rulesFiles[3])
 
-  cols = c('TR.CurativeTreatmentModality','TR.PalliativeTreatmentModality')
-  sapply(tr[cols], function(x) grep('chemo',x, value=T, ignore.case=T))
+  #cols = c('TR.CurativeTreatmentModality','TR.PalliativeTreatmentModality')
+  #sapply(tr[cols], function(x) grep('chemo',x, value=T, ignore.case=T))
 
   tr$TR.Chemotherapy = 'no'
   tr[with(tr, grep('chemo', TR.CurativeTreatmentModality, ignore.case=T) ), 'TR.Chemotherapy'] =  'yes'
@@ -227,7 +288,6 @@ read.therapy<-function(ocs, tables, rulesFiles=NULL, ...) {
   tr$TR.EndoscopicTherapy = 'no'
   tr[with(tr, grep('endoscop[y|ic]', TR.CurativeTreatmentModality, ignore.case=T) ), 'TR.EndoscopicTherapy'] =  'yes'
   tr[with(tr, grep('endoscop[y|ic]', TR.PalliativeTreatmentModality, ignore.case=T) ), 'TR.EndoscopicTherapy'] =  'yes'
-
 
   tr[grep('Regimen',colnames(tr), value=T)] = lapply(tr[grep('Regimen',colnames(tr), value=T)], as.character)
 
@@ -258,15 +318,22 @@ read.therapy<-function(ocs, tables, rulesFiles=NULL, ...) {
   co = sapply(tr[grep('Capecitabine|Oxaliplatin', colnames(tr), value=T)], revalue.reg)
   tr$TR.Regimen.CO = revalue(as.factor(as.integer(apply(ecf, 1, function(x) sum(x) == 2))), reg.char)
 
-  message(paste(nrow(tr), "patients"))
+  if (verbose) message(paste(nrow(tr), "patients"))
 
   return(tr)
 }
 
-read.surgery<-function(ocs, table, rulesFile=NULL, ...) {
+read.surgery<-function(ocs, table, occams_ids=NULL, rulesFile=NULL, ...) {
+  z = list(...)
+  verbose = ifelse (!is.null(z$verbose), z$verbose, F)
+
+  table = list.clinical.tables(ocs,'st')
+
   if (inherits(ocs, "OCCAMSLabkey")) {
-    message(paste("Reading",table))
-    st <- get.table.data(ocs,table, rulesFile=rulesFile)
+    if (verbose) message(paste("Reading",table))
+
+    filter = make.id.filter(occams_ids,'ST_StudySubjectID')
+    st <- get.table.data(ocs,table, rulesFile=rulesFile,colFilter=filter)
   } else {
     st <- read.table.data(table, rulesFile=rulesFile)
   }
@@ -274,7 +341,7 @@ read.surgery<-function(ocs, table, rulesFile=NULL, ...) {
   dups <- which(duplicated(st[,2]))
   duplicatePts <- st[dups,]
 
-  st <- st[-dups, ]
+  if (length(dups) > 0) st <- st[-dups, ]
   st <- rows.as.patient.id(st, 2)
 
   st$ST.SurgeryPerformed <- with(st, ifelse (ST.MainSurgery == 'yes' & (is.na(ST.ReasonIfNoSurgery) | is.na(ST.OtherReasonForNoSurgery)), 'yes', 'no'))
@@ -287,17 +354,24 @@ read.surgery<-function(ocs, table, rulesFile=NULL, ...) {
   cols <- grep("ASAGrade|Percentage", colnames(st), value=T)
   st[cols] <- lapply(st[cols], as.numeric)
 
-  message(paste(nrow(st), "patients"))
+  if(verbose) message(paste(nrow(st), "patients"))
 
   return(st)
 }
 
-read.pathology<-function(ocs, table, rulesFile=NULL, ...) {
+read.pathology<-function(ocs, table, occams_ids=NULL, rulesFile=NULL, ...) {
   require(plyr)
 
+  z = list(...)
+  verbose = ifelse (!is.null(z$verbose), z$verbose, F)
+
+  table = list.clinical.tables(ocs,'rp')
+
+  filter = make.id.filter(occams_ids,'RP_StudySubjectID')
+
   if (inherits(ocs, "OCCAMSLabkey")) {
-    message(paste("Reading",table))
-    rp <- get.table.data(ocs=ocs, table=table, uniqueID=NULL, rulesFile=rulesFile, ...)
+    if (verbose) message(paste("Reading",table))
+    rp <- get.table.data(ocs=ocs, table=table, uniqueID=NULL, rulesFile=rulesFile, colFilter=filter)
   } else {
     rp <- read.table.data(table, uniqueID=NULL, rulesFile=rulesFile)
   }
@@ -305,7 +379,7 @@ read.pathology<-function(ocs, table, rulesFile=NULL, ...) {
   dups <- which(duplicated(rp[,2]))
   duplicatePts <- rp[dups,]
 
-  rp <- rp[-dups, ]
+  if (length(dups) > 0) rp <- rp[-dups, ]
 
   cols <- grep("Siewert|NumberOf|width|length", colnames(rp), value=T)
   rp[cols] <- lapply(rp[cols], as.numeric)
@@ -341,36 +415,45 @@ read.pathology<-function(ocs, table, rulesFile=NULL, ...) {
 
   file = system.file("extdata", "be_updates_20160930.txt", package="openclinica.occams")
   if (!exists('be_updates') & (!is.null(file) & file.exists(file))) {
-    message(paste("Reading", file))
+    if (verbose) message(paste("Reading", file))
     be_updates = readr::read_tsv(file)
   }
 
-  message("Updating RP.BarrettsAdjacent patients from Caitrona's worksheet.")
+  if (verbose) message("Updating RP.BarrettsAdjacent patients from Caitrona's worksheet.")
   be_updates = be_updates %>% dplyr::mutate( `Barret's Confirmed`=ifelse(`Barret's Confirmed` == '?', NA, `Barret's Confirmed`) )
   be_updates$`Barret's Confirmed` = as.integer(as.factor(be_updates$`Barret's Confirmed`))-1
   # Assume Caitron's are the final say (they matched other than NA anyhow)
-  rp[be_updates$`OCCAMS/ID`,'RP.BarrettsAdjacent'] = be_updates$`Barret's Confirmed`
+  be_updates = subset(be_updates, `OCCAMS/ID` %in% intersect(rownames(rp),be_updates$`OCCAMS/ID`))
+
+  rp[ be_updates$`OCCAMS/ID`,'RP.BarrettsAdjacent'] = be_updates$`Barret's Confirmed`
 
   rp$RP.BarrettsAdjacent <- revalue(as.factor(rp$RP.BarrettsAdjacent), reg)
 
   cols = c('RP.Nstage.RP.TNMSystem', 'RP.Nstage.RP.TNM6')
   rp[cols] = NULL
 
-  message(paste(nrow(rp), "patients"))
+  if(verbose) message(paste(nrow(rp), "patients"))
 
   return(rp)
 }
 
-read.referral.diagnosis<-function(ocs, tables, rulesFile=NULL, ...) {
+read.referral.diagnosis<-function(ocs, tables, occams_ids=NULL, rulesFile=NULL, ...) {
+  z = list(...)
+  verbose = ifelse (!is.null(z$verbose), z$verbose, F)
+
+  tables = list.clinical.tables(ocs,'rd')
+
+  filter = make.id.filter(occams_ids,'RD_StudySubjectID')
+
   if (inherits(ocs, "OCCAMSLabkey")) {
-    message(paste("Reading",tables))
-    rd <- get.table.data(ocs,grep('^rd_', tables, value=T), uniqueID=2, rulesFile=rulesFile, ...)
+    if (verbose) message(paste("Reading",tables))
+    rd <- get.table.data(ocs,grep('^rd_', tables, value=T), uniqueID=2, rulesFile=rulesFile, colFilter=filter)
   } else {
     rd <- read.table.data(tables[grep('^rd_', basename(tables))], uniqueID=2, rulesFile=rulesFile)
   }
   rd$RD.SiewertClassification <- ordered(rd$RD.SiewertClassification, levels=c(1,2,3))
 
-  message(paste(nrow(rd), "patients"))
+  if(verbose) message(paste(nrow(rd), "patients"))
   return(rd)
 }
 
@@ -404,9 +487,18 @@ dump.clinical.data<-function(ocs, prefixes=NULL, version=NULL, outdir="/tmp") {
   message(paste("Completed dump for", length(tables), "tables"))
 }
 
-
-download.all.tables<-function(ocs, prefixes=c('di','rd','ex','ps','tp','tr','st','rp','fe','tc'), missing=NULL) {
+#' Download in wide format the Labkey data for all or a selected group of patients.
+#' @name download.all.tables
+#' @param ocs
+#' @param occams_ids Array of occams identifiers, this is optional. The default returns all patients, better to use get.patients(...) if you want this.
+#' @param missing Replace missing values with this string, default is NA
+#' @param verbose
+#'
+#' @author
+#' @export
+download.all.tables<-function(ocs, occams_ids=NULL, missing=NULL, verbose=T) {
   require(plyr)
+  prefixes=c('di','rd','ex','ps','tp','tr','st','rp','fe','tc')
 
   if (inherits(ocs, "OCCAMSLabkey")) {
     tables = list.clinical.tables(ocs, prefixes)
@@ -419,29 +511,27 @@ download.all.tables<-function(ocs, prefixes=c('di','rd','ex','ps','tp','tr','st'
   })
 
   di <- clean.missing(
-    read.demographics(ocs, ordered_tables$di, NULL),NULL )
-
-  di <- clean.missing(
-      read.demographics(ocs, ordered_tables$di, rulesFile=paste(path.package('openclinica.occams')[1], "editrules/di_editrules.txt", sep='/')),
+      read.demographics(ocs, ordered_tables$di, rulesFile=paste(path.package('openclinica.occams')[1], "editrules/di_editrules.txt", sep='/'),occams_ids=occams_ids,verbose=verbose),
     missing )
 
-  ex <- clean.missing( read.exposures(ocs, ordered_tables$ex, rulesFiles=NULL), missing )
-  fe <- read.endpoints(ocs, ordered_tables$fe, rulesFiles=paste(path.package('openclinica.occams')[1],c("editrules/fe_editrules.txt", "editrules/fe1_editrules.txt"), sep='/'))
+  ex <- clean.missing( read.exposures(ocs, ordered_tables$ex, rulesFiles=NULL, occams_ids=occams_ids, verbose=verbose), missing )
+  fe <- read.endpoints(ocs, ordered_tables$fe,
+                       rulesFiles=paste(path.package('openclinica.occams'), c('editrules/fe_editrules.txt', 'editrules/fe1_editrules.txt'), sep='/'), occams_ids=occams_ids, verbose=verbose)
   withdrawn <- fe$withdrawn
   fe <- clean.missing(fe$fe, missing)
 
-  rd <- clean.missing( read.referral.diagnosis(ocs, ordered_tables$rd, rulesFile=NULL), missing )
+  rd <- clean.missing( read.referral.diagnosis(ocs, ordered_tables$rd, rulesFile=NULL, occams_ids=occams_ids, verbose=verbose), missing )
 
   # these two have duplicates as well
-  ps <- clean.missing( read.prestage(ocs, ordered_tables$ps, rulesFiles=NULL)$ps, missing )
-  tp <- clean.missing( read.treatment.plan(ocs, ordered_tables$tp, rulesFiles=NULL)$tp, missing )
+  ps <- clean.missing( read.prestage(ocs, ordered_tables$ps, rulesFiles=NULL, occams_ids=occams_ids, verbose=verbose)$ps, missing )
+  tp <- clean.missing( read.treatment.plan(ocs, ordered_tables$tp, rulesFiles=NULL, occams_ids=occams_ids, verbose=verbose)$tp, missing )
 
-  tr <- clean.missing( read.therapy(ocs, ordered_tables$tr, rulesFiles=NULL), missing )
-  st <- read.surgery(ocs, ordered_tables$st, rulesFile=NULL)
+  tr <- clean.missing( read.therapy(ocs, ordered_tables$tr, rulesFiles=NULL, occams_ids=occams_ids, verbose=verbose), missing )
+  st <- read.surgery(ocs, ordered_tables$st, rulesFile=NULL, occams_ids=occams_ids, verbose=verbose)
 
-  rp <- clean.missing( read.pathology(ocs, ordered_tables$rp, rulesFile=NULL), missing)
+  rp <- clean.missing( read.pathology(ocs, ordered_tables$rp, occams_ids=occams_ids, rulesFile=NULL, verbose=verbose), missing)
 
-  message("Creating final patient table")
+  if (verbose) message("Creating final patient table")
   # Merge final table
   all <- merge.patient.tables(di, fe, all=T)
   all <- merge.patient.tables(all, tp, all=T)
@@ -452,9 +542,10 @@ download.all.tables<-function(ocs, prefixes=c('di','rd','ex','ps','tp','tr','st'
   all <- merge.patient.tables(all, st, all=T)
   all <- merge.patient.tables(all, rp, all=T)
 
-  all = all[-which(rownames(all) %in% withdrawn),]
+  rm = which(rownames(all) %in% withdrawn)
+  if (length(rm) > 0) all = all[-rm,]
 
-  message(paste("Final patient total:", nrow(all)))
+  if (verbose) message(paste("Final patient total:", nrow(all)))
 
   all <- prestage.to.path(all)
 
@@ -492,11 +583,17 @@ download.all.tables<-function(ocs, prefixes=c('di','rd','ex','ps','tp','tr','st'
 
   all$Weeks.Survival = round(as.numeric(with(all, difftime(FE.LastSeenDate, RD.DiagnosisDate, units='weeks'))), 3)
 
+  if ( length(which(is.na(all$FE.DateOfPatientDeath))) == nrow(all) ) {
+    warning("Date of death has been removed, survival time not calculated. ")
+    all$Weeks.Survival = NA
+  }
+
+
   bad = with(all, which(Weeks.Survival < 1))
   message(paste(length(bad), "patients have a diagnosis date before their last seen (death/surgery/etc) date."))
   all[bad, c('RD.DiagnosisDate', 'FE.LastSeenDate', 'Weeks.Survival')] = NA
 
-  tc <- read.tissue.collection(ocs, ordered_tables$tc, rulesFiles=NULL)
+  tc <- read.tissue.collection(ocs, ordered_tables$tc, rulesFiles=NULL, occams_ids=occams_ids)
 
   return(list('patients'=all, 'tissues'=tc, 'withdrawn'=withdrawn))
 }
@@ -558,3 +655,7 @@ transform.patient.table<-function(fd) {
   message(ncol(newdf))
   return(newdf)
 }
+
+
+
+

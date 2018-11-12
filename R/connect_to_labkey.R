@@ -11,6 +11,12 @@ create.session<-function(url="https://occams.comlab.ox.ac.uk/labkey", path="/ICG
   return(session)
 }
 
+#' Create connection to Labkey
+#' @name connect.to.labkey
+#' @param file labkey credential file path, default is ~/.labkey.cred
+#'
+#' @author
+#' @export
 connect.to.labkey<-function(file="~/.labkey.cred") {
   if (is.null(file))
     stop("File with url, path, user, pwd entries required for connection.")
@@ -120,12 +126,12 @@ clean.na<-function(df, text=c('not_recorded','not recorded', 'not assessed', 'un
   return( lapply(df[], function(x) { ifelse(grepl(paste(text, collapse="|"), x, ignore.case=T), NA, x) }) )
 }
 
-
-editrules<-function(file, df) {
+editrules<-function(file, df, verbose=T) {
   if (!file.exists(file))
     stop(paste("File does not exist or is not readable: ", file))
   rules <- read.table(file,header=T, stringsAsFactors=F, sep=":", quote="")
-  message(paste("Applying rules found in", file))
+
+  if(verbose) message(paste("Applying rules found in", file))
 
   # Numeric
   cols = rules[which(rules$Def == 'numeric'), 'Column']
@@ -151,13 +157,41 @@ editrules<-function(file, df) {
     }
   })
 
-  names(failed) <- rules$Column
+  #names(failed) <- rules$Column
 
-  for (n in names(failed)) {
-    df[failed[[n]], n] <- NA
-  }
-  write.table(unlist(lapply(failed, length)), quote=F, col.names = F)
+  #for (n in names(failed)) {
+  #  df[failed[[n]], n] <- NA
+  #}
+  #write.table(unlist(lapply(failed, length)), quote=F, col.names = F)
 
   return(list("f" = lapply(failed, length), "df"= df[rules$Column]))
 }
 
+
+#' Get selected patients in the wide table format
+#' @name get.patients
+#' @param ocs Connection from connect.to.labkey()
+#' @param occams_ids Array of occams identifiers to select
+#'
+#' @author
+#' @export
+get.patients<-function(ocs, occams_ids, verbose=F) {
+  require(Rlabkey)
+
+  if (!inherits(ocs, "OCCAMSLabkey"))
+    stop("Create connection to OCCAMS Labkey first")
+
+  ids = grepl('^OCCAMS/[A-Z]{2}/[0-9]+', occams_ids)
+
+  incorrect_ids = occams_ids[!ids]
+  ids = occams_ids[ids]
+
+  if (verbose) message(paste("Retrieving",length(ids),"patients."))
+
+  if (length(incorrect_ids) > 0)
+    warning(paste(length(incorrect_ids)), ' are not OCCAMS identifiers.')
+
+  occams = download.all.tables(ocs=ocs, verbose=verbose, occams_ids=ids)
+
+  return(list('patients'=occams$patients, 'tissues'=occams$tissues, 'incorrect_ids'=incorrect_ids, 'withdrawn'=occams$withdrawn))
+}

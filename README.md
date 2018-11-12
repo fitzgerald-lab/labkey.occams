@@ -16,10 +16,10 @@ Install R library from source
 
 Create a file with the following fields:
 
-url=https://occams.comlab.ox.ac.uk/labkey
-path=/ICGC/Cohorts/All Study Subjects
-user=< your user >
-pwd=< your password >
+> url=https://occams.comlab.ox.ac.uk/labkey
+> path=/ICGC/Cohorts/All Study Subjects
+> user=< your user id >
+> pwd=< your password >
 
 ### Two basic uses:
 
@@ -28,18 +28,25 @@ These generate slightly different sets of data as the cleaning process merges an
 1. Create a dump of the data contained in all tables on LabKey
 2. Generate a cleaned version of the data for analysis
 
-Usage:
+## Usage:
 
-ocs <- connect.to.labkey(file='labkey.creds') # default is ~/.labkey.cred
+default file is ~/.labkey.cred so if you put it there, no need to provide the file path
 
-# For (1)
-#
-dump.clinical.data(ocs, outdir="/tmp") # each Labkey table will be output separately in the outdir
+> ocs <- connect.to.labkey(file='labkey.creds') 
 
-# For (2)
-occams <- download.all.tables(ocs)
-occams$patients  # patient clinical data table
-occams$tissues  # tissue related clinical data table
+### For (1)
+
+Each Labkey table will be output separately in the outdir, this is not recommended.
+
+> dump.clinical.data(ocs, outdir="/tmp") 
+
+### For (2)
+
+All of the labkey tables will be merged into a wide table with a single row per patient for all tables. The object returned contains a list with two names element.  'patient' is the semi-curated per-patient clinical information, 'tissues' is the tissue-related clinical information (uncurated currently).  
+
+> occams <- download.all.tables(ocs)
+> occams$patients  # patient clinical data table
+> occams$tissues  # tissue related clinical data table
 
 
 

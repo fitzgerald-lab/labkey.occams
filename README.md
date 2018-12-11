@@ -16,12 +16,11 @@ _IMPORTANT NOTE:_ Until the OCCAMS LabKey server is updated to v.16 or above, th
 Create a file with the following fields:
 
 ```R
- url=https://occams.comlab.ox.ac.uk/labkey
+ url=https://occams.cs.ox.ac.uk/labkey/
  path=/ICGC/Cohorts/All Study Subjects
  user=MyUser
  pwd=MyPassword
- 
- ```
+  ```
 
 
 ## Primary Use

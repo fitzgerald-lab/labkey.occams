@@ -20,9 +20,7 @@ create.session<-function(url="https://occams.comlab.ox.ac.uk/labkey", path="/ICG
 connect.to.labkey<-function(file="~/.labkey.cred") {
   if (is.null(file))
     stop("File with url, path, user, pwd entries required for connection.")
-
   vars <- read.csv(file, header=F, sep="=", row.names=1, stringsAsFactors=F)
-
   return(create.connection(url=vars['url',], path=vars['path',], user=vars['user',], pwd=vars['pwd',]))
 }
 
@@ -36,7 +34,7 @@ create.connection<-function(url="https://occams.comlab.ox.ac.uk/labkey", path="/
     Rlabkey::getSchema(session, "oc")
   }, error = function(e) {
     tryCatch({
-      Rlabkey::getSchema(session)
+      Rlabkey::getSchema(session, 'oc')
     }, error = function(e1){
       stop(paste("Failed to get schema from LabKey server:", e ))
     })

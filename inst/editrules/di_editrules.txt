@@ -1,9 +1,9 @@
 Column:Def:Rule
 DI.StudySubjectID:character:grepl("OCCAMS.*", DI.StudySubjectID)
-DI.StudySite:character:DI.StudySite %in% c('Belfast','Birmingham','Bournemouth','Cambridge','Cambridge ps','Coventry','Edinburgh','Gloucester','Guildford','Imperial college','Kilmarnock','North stafford','Norwich','Nottingham','Other','Plymouth','Romford','Salford','Southampton','Southampton other','St thomas london','Trainingsite','Ucl','Wigan','Worcester','Wythenshaw')
 DI.ageAtDiagnosis:numeric:DI.ageAtDiagnosis > 10
+DI.ageAtDiagnosis.months:numeric:DI.ageAtDiagnosis.months > 120
 DI.PatientDateOfDeath:date:DI.PatientDateOfDeath > DI.DateOfInformedConsentForCAMSAndICGC
 DI.PatientGender:character:DI.PatientGender %in% c('male','female')
 DI.DateOfInformedConsentForCAMSAndICGC:date:DI.DateOfInformedConsentForCAMSAndICGC > as.Date("2009-01-01")
-DI.Ethnic.Category:character:DI.Ethnic.Category %in% c('99','A','B','C','E','F','G','H','J','K','L','M','N','P','R','S','Z')
+
 

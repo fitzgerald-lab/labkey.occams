@@ -1,7 +1,7 @@
 Package: openclinica.occams
 Type: Package
 Title: Download and clean LabKey data
-Version: 0.1.1
+Version: 0.2.1
 Author: Who wrote it
 Maintainer: The package maintainer <sk875@mrc-cu.cam.ac.uk>
 Description: More about what it does (maybe more than one line)
@@ -9,10 +9,10 @@ Description: More about what it does (maybe more than one line)
 License: GPL-3
 Encoding: UTF-8
 LazyData: true
-Imports:
+Depends:
   tidyverse,
   RCurl,
-  Rlabkey (<= 2.1.136),
-  data.table
+  Rlabkey (<= 2.1.136)
+Imports:
 Suggests: testthat
-RoxygenNote: 6.1.0
+RoxygenNote: 6.1.1

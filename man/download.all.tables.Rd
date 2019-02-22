@@ -5,7 +5,7 @@
 \title{Download in wide format the Labkey data for all or a selected group of patients.}
 \usage{
 download.all.tables(ocs, occams_ids = NULL, missing = NULL,
-  verbose = T)
+  versions = "z1", verbose = T)
 }
 \arguments{
 \item{occams_ids}{Array of occams identifiers, this is optional. The default returns all patients, better to use get.patients(...) if you want this.}

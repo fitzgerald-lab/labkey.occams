@@ -24,25 +24,25 @@ read.tissue.collection<-function(ocs, tables, rulesFiles=NULL, occams_ids=NULL, 
   warning(paste("Removing", nrow(duplicatePts), "duplicated patient rows"))
   if (length(dups) > 0) tc <- tc[-dups, ]
 
-  samplesTaken <- rownames(subset(tc,TC.TissueSamplesTaken == "Yes"))
+  samplesTaken <- tc %>% filter(TC.TissueSamplesTaken == "Yes")
 
   # useful table
   filter = make.id.filter(occams_ids, 'TC1_StudySubjectID')
   tc1 <- get.table.data(ocs=ocs, table=grep('^tc1_',tables,value=T), colFilter=filter)
 
   # But it seems the two tables may not actually match up! There are more patients in the second table then are listed in the first as having had tissue taken
-  missingEntries <- setdiff(unique(tc1$TC1.StudySubjectID), samplesTaken)
+  missingEntries = setdiff(samplesTaken$TC.StudySubjectID, tc1$TC1.StudySubjectID)
 
   # Recode for clarity
-  types <- c("endoscopy", "surgical","laparoscopy","EMR")
-  names(types) <- c('E','S','L','R')
-  tc1$TC1.TissueType <- revalue(tc1$TC1.TissueType, types)
+  tc1 = tc1 %>% dplyr::mutate(
+    TC1.TissueType = recode(TC1.TissueType, 'E'="endoscopy", 'S'="surgical",'L'="laparoscopy",'R'="EMR"),
+    TC1.TissueSource = recode(TC1.TissueSource, 'N'="normal oesophagus", 'B'="barretts", 'T'="tumour", 'G'="normal gastric", 'L'="lymph node", 'M'="metastasis")
+  )
 
-  sources <- c("normal oesophagus", "barretts", "tumour", "normal gastric", "lymph node", "metastasis")
-  names(sources) <- c('N','B','T','G','L','M')
-  tc1$TC1.TissueSource <- revalue(tc1$TC1.TissueSource, sources)
+  tc1 = left_join(tc1, tc, by=c('TC1.StudySubjectID'='TC.StudySubjectID')) %>% dplyr::rename('StudySubjectID'='TC1.StudySubjectID') %>%
+    select(StudySubjectID, starts_with('TC.'), starts_with('TC1.')) %>% group_by(StudySubjectID)
 
-  if (verbose) message(paste(nrow(tc1), "samples"))
+  if (verbose) message(paste(nrow(tc1), "tissues"))
 
   return(tc1)
 }
@@ -395,8 +395,6 @@ read.surgery<-function(ocs, table, occams_ids=NULL, rulesFile=NULL, ...) {
 }
 
 read.pathology<-function(ocs, table, occams_ids=NULL, rulesFile=NULL, ...) {
-  require(plyr)
-
   z = list(...)
   verbose = ifelse (!is.null(z$verbose), z$verbose, F)
 
@@ -427,15 +425,15 @@ read.pathology<-function(ocs, table, occams_ids=NULL, rulesFile=NULL, ...) {
     return(x)
   }
 
-
- rp = rp %>% dplyr::mutate(
+ rp = rp %>% ungroup %>% rowwise %>% dplyr::mutate(
    RP.TNMStage.c = tnmStage(RP.TStage.PrimaryTumour, RP.Nstage.RP.TNM7, RP.MStage.DistantMetastasis),
-   RP.TumourDifferentiation.c = diff.grade(RP.TumourGradingDifferentiationStatus)) %>% ungroup %>% mutate(
-      RP.TumourResponse = recode_factor(RP.TumourResponse,'0pc_remaining'='0%','less_than_20pc'='<20%', 'greater_than_or_equals_to_20pc'='≥20%', 'less_than_50pc'='<50%', 'greater_than_or_equals_to_50pc'='≥50%', .ordered=T),
-      RP.Location = factor(RP.Location, levels=c('oesophageal','goj','gastric')),
-      RP.MandardScoreForResponse = factor(RP.MandardScoreForResponse, levels=c('TRG1','TRG2','TRG3','TRG4','TRG5')),
-      # If you see it macro, then it is there micro as well
-      RP.BarrettsAdjacentToTumour = ifelse(RP.BarettsAdjacentToTumourMicroscopicIM == 'yes' | RP.BarettsAdjacentToTumourMacroscopic == 'yes','yes','no')
+   RP.TumourDifferentiation.c = diff.grade(RP.TumourGradingDifferentiationStatus)) %>%
+   dplyr::mutate(
+     RP.TumourResponse = recode_factor(RP.TumourResponse,'0pc_remaining'='0%','less_than_20pc'='<20%', 'greater_than_or_equals_to_20pc'='≥20%', 'less_than_50pc'='<50%', 'greater_than_or_equals_to_50pc'='≥50%', .ordered=T),
+     RP.Location = factor(RP.Location, levels=c('oesophageal','goj','gastric')),
+    RP.MandardScoreForResponse = factor(RP.MandardScoreForResponse, levels=c('TRG1','TRG2','TRG3','TRG4','TRG5')),
+    # If you see it macro, then it is there micro as well
+    RP.BarrettsAdjacentToTumour.c = ifelse(RP.BarettsAdjacentToTumourMicroscopicIM == 'yes' | RP.BarettsAdjacentToTumourMacroscopic == 'yes','yes','no')
   )
 
   file = system.file("extdata", "be_updates_20160930.txt", package="openclinica.occams")
@@ -444,15 +442,15 @@ read.pathology<-function(ocs, table, occams_ids=NULL, rulesFile=NULL, ...) {
     be_updates = readr::read_tsv(file, col_types='ccc')
 
     if (verbose) message("Updating RP.BarrettsAdjacent patients from Caitrona's worksheet.")
-    be_updates = be_updates %>% dplyr::mutate( `Barret's Confirmed`=ifelse(`Barret's Confirmed` == '?', NA, `Barret's Confirmed`),
+    be_updates = be_updates %>% dplyr::mutate( `Barret's Confirmed`= ifelse(`Barret's Confirmed` == '?', NA, `Barret's Confirmed`),
                                                `Barret's Confirmed` = recode(`Barret's Confirmed`, 'N'='no','Y'='yes'))
 
     # Assume Caitrona's are the final say (they matched other than NA anyhow)
     rp = left_join(rp, be_updates, by=c('RP.StudySubjectID'='OCCAMS/ID')) %>% rowwise %>% dplyr::mutate(
-      RP.BarrettsAdjacentToTumour = mr(`Barret's Confirmed`, RP.BarrettsAdjacentToTumour,1) ) %>% select(-Source, -contains('Confirmed'))
+      RP.BarrettsAdjacentToTumour.c = mr(`Barret's Confirmed`, RP.BarrettsAdjacentToTumour.c,1) ) %>% select(-Source, -contains('Confirmed'))
   }
 
-  rp = rp %>% ungroup %>% mutate(RP.BarrettsAdjacentToTumour = factor(RP.BarrettsAdjacentToTumour)) %>% select(-contains('Nstage.RP.TNMSystem'),-contains('RP.TNM6')) %>% group_by(RP.StudySubjectID)
+  rp = rp %>% ungroup %>% mutate(RP.BarrettsAdjacentToTumour.c = factor(RP.BarrettsAdjacentToTumour.c)) %>% select(-contains('Nstage.RP.TNMSystem'),-contains('RP.TNM6')) %>% group_by(RP.StudySubjectID)
 
   if(verbose) message(paste(nrow(rp), "patients"))
 

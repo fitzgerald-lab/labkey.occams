@@ -14,37 +14,30 @@ fix.tumor.factors<-function(fd) {
   orderedNstages = c('Nx','N0','N1','N2','N3')
   orderedMstages = c('Mx','M0','M1')
 
-  tcols = grep('(Tstage|.+_T$)', colnames(fd), ignore.case=T,value=T)
-  fd[tcols] = lapply(fd[tcols], ordered, levels=orderedTstages)
-
-  ncols = grep('(Nstage.+TNM7|.+_N$)', colnames(fd), ignore.case=T,value=T)
-  fd[ncols] = lapply(fd[ncols], ordered, levels=orderedNstages)
-
-  mcols = grep('(Mstage|.+_M$)', colnames(fd), ignore.case=T,value=T)
-  fd[mcols] = lapply(fd[mcols], ordered, levels=orderedMstages)
+  fd = fd %>% ungroup %>% dplyr::mutate_at(vars(matches('(Tstage|.+_T$)')), funs(factor), levels=orderedTstages, ordered=T) %>%
+    dplyr::mutate_at(vars(matches('(Nstage.+TNM7|.+_N$)')), funs(factor), levels=orderedNstages, ordered=T) %>%
+    dplyr::mutate_at(vars(matches('(Mstage|.+_M$)')), funs(factor), levels=orderedMstages, ordered=T)
 
   return(fd)
 }
 
 text.to.tstage<-function(fd) {
   orderedTstages = c(NA,'Tx','T0','Tis','T1','T1a','T1b','T2','T3','T4','T4a','T4b')
-  names(orderedTstages) = c('not_recorded',
-                            'primary_tumour_cannot_be_assessed',
-                            'no_evidence_of_primary_tumour',
-                            'carcinoma_in_situ_high_grade_dysplasia',
-                            'tumour_invades_lamina_propria_muscularis_mucosae_or_submucosa',
-                            'tumour_invades_lamina_propria_or_muscularis_mucosae',
-                            'tumour_invades_submucosa',
-                            'tumour_invades_muscularis_propria',
-                            'tumour_invades_adventitia',
-                            'tumour_invades_adjacent_structures',
-                            'tumour_invades_pleura_pericardium_or_diaphragm',
-                            'tumour_invades_other_adjacent_structures_such_as_aorta_vertebral_body_or_trachea')
 
-  tcols = grep('(Tstage|.+_T$)', colnames(fd), ignore.case=T,value=T)
-  fd[tcols] = lapply(fd[tcols], ordered, levels=names(orderedTstages))
-
-  fd[tcols] = lapply(fd[tcols], revalue, orderedTstages)
+  fd = fd %>% ungroup %>% dplyr::mutate_at(vars(matches('(Tstage|.+_T$)')), funs(recode),
+                          'not_recorded'=NA_character_,
+                          'primary_tumour_cannot_be_assessed'='Tx',
+                          'no_evidence_of_primary_tumour'='T0',
+                          'carcinoma_in_situ_high_grade_dysplasia'='Tis',
+                          'tumour_invades_lamina_propria_muscularis_mucosae_or_submucosa'='T1',
+                          'tumour_invades_lamina_propria_or_muscularis_mucosae'='T1a',
+                          'tumour_invades_submucosa'='T1b',
+                          'tumour_invades_muscularis_propria'='T2',
+                          'tumour_invades_adventitia'='T3',
+                          'tumour_invades_adjacent_structures'='T4',
+                          'tumour_invades_pleura_pericardium_or_diaphragm'='T4a',
+                          'tumour_invades_other_adjacent_structures_such_as_aorta_vertebral_body_or_trachea'='T4b' ) %>%
+    dplyr::mutate_at(vars(matches('(Tstage|.+_T$)')), funs(factor), levels=orderedTstages, ordered=T)
 
   return(fd)
 }
@@ -61,22 +54,20 @@ trim<-function(x) {
 
 recode.siewert<-function(df) {
   grp = group_vars(df)
-  df = df %>% ungroup %>% mutate_at(vars(contains('SiewertClassification')), funs(recode_factor), '1'='Type I','2'='Type II','3'='Type III', .ordered=F, .missing=NA_character_ )
+  df = df %>% ungroup %>% dplyr::mutate_at(vars(contains('SiewertClassification')), funs(recode_factor), '1'='Type I','2'='Type II','3'='Type III', .ordered=F, .missing=NA_character_ )
   if (length(grp) > 0) df = df %>% group_by(!!grp)
   return(df)
 }
 
 recode.TNM<-function(df) {
   grp = group_vars(df)
-  df = df %>% ungroup %>% mutate_at(vars(contains('TNMStage')), funs(factor), levels=c('I','II','III', 'IV'), ordered=T)
+  df = df %>% ungroup %>% dplyr::mutate_at(vars(contains('TNMStage')), funs(factor), levels=c('I','II','III', 'IV'), ordered=T)
   if (length(grp) > 0) df = df %>% group_by(!!grp)
   return(df)
 }
 
 
 tnmStage <- function(Ts,Ns,Ms) {
-#  print(paste(Ts,Ns,Ms))
-
   if (is.na(Ts)) return(NA)
   if (!is.na(Ns) & Ns == 'unknown') Ns = NA
   if (!is.na(Ms) & Ms == 'unknown') Ms = NA

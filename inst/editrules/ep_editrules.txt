@@ -1,0 +1,7 @@
+Column:Def:Rule
+EP.StudySubjectID:character:grepl("OCCAMS.*",EP.StudySubjectID)
+EP.EndPoint:character:EP.EndPoint %in% c('Lost to follow up','Patient died','Patient withdrawal','Follow-up ended')
+EP.DateOfPatientDeath:date:EP.DateOfPatientDeath > as.Date('2010-01-01')
+EP.ReasonForPatientDeath:character:EP.ReasonForPatientDeath %in% c('Chemotherapy related','Other (Specify)','Recurrence of original disease','Second primary tumour','Sepsis')
+EP.ReasonForPatientDeathOther:character:grepl(".*", EP.ReasonForPatientDeathOther)
+EP.AdditionalDetailsForPatientEndPoint:character:grepl(".*", EP.AdditionalDetailsForPatientEndPoint)

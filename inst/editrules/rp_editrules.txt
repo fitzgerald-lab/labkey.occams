@@ -1,0 +1,6 @@
+Column:Def:Rule
+RP.SiewertClassification:numeric:RP.SiewertClassification <= 3
+RP.Histology:character:RP.Histology %in% c('adenocarcinoma', 'adenosquamous carcinoma', 'other epithelial carcinoma', 'small-cell carcinoma', 'Squamous cell carcinoma', 'undifferentiated carcinoma')
+RP.Tumour.Size.width.mm:numeric:RP.Tumour.Size.width.mm >= 0
+RP.Tumour.Size.length.mm:numeric:RP.Tumour.Size.length.mm >= 0
+RP.MandardScoreForResponse:character:RP.MandardScoreForResponse %in% c('TRG1','TRG2','TRG3','TRG4','TRG5')

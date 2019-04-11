@@ -6,6 +6,5 @@
 *.RData
 *.Ruserdata
 *.png
-*.txt
 .Rproj.user
 packrat/lib*/

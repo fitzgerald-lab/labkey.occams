@@ -1,0 +1,5 @@
+Column:Def:Rule
+RD.StudySubjectID:character:grepl("OCCAMS.*",RD.StudySubjectID)
+RD.SiewertClassification:numeric:RD.SiewertClassification <= 3
+RD.DateOfOGCDiagnosis:date:RD.DateOfOGCDiagnosis > as.Date("2009-01-01")
+RD.Stomach:character:RD.Stomach %in% c('antrum','body','cardia','fundus','pylorus')

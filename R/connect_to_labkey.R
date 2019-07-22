@@ -22,8 +22,12 @@ create.session<-function(url="https://occams.comlab.ox.ac.uk/labkey", path="/ICG
 connect.to.labkey<-function(file="~/.labkey.cred") {
   if (is.null(file))
     stop("File with url, path, user, pwd entries required for connection.")
-  vars <- read.csv(file, header=F, sep="=", row.names=1, stringsAsFactors=F)
-  return(create.connection(url=vars['url',], path=vars['path',], user=vars['user',], pwd=vars['pwd',]))
+
+  vars = readr::read_delim(file, delim="=", col_names = F, col_types = 'cc') %>% spread(X1, X2)
+
+  if (length(grep('path|pwd|url|user', colnames(vars) )) < 4) stop('Missing information in the labkey.cred file. path,pwd,url,user are required.')
+
+  return(create.connection(url=vars$url, path=vars$path, user=vars$user, pwd=vars$pwd))
 }
 
 create.connection<-function(url="https://occams.comlab.ox.ac.uk/labkey", path="/ICGC/Cohorts/All Study Subjects", user, pwd) {

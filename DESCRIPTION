@@ -12,7 +12,7 @@ LazyData: true
 Depends:
   tidyverse,
   RCurl,
-  Rlabkey (<= 2.1.136)
+  Rlabkey
 Imports:
 Suggests: testthat
 RoxygenNote: 6.1.1

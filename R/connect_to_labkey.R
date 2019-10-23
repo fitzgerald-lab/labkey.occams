@@ -1,18 +1,6 @@
 require(tidyverse)
 require(Rlabkey)
 
-create.session<-function(url="https://occams.comlab.ox.ac.uk/labkey", path="/ICGC/Cohorts/All Study Subjects", user, pwd) {
-  require(Rlabkey)
-#  ssc <- Rlabkey::labkey.acceptSelfSignedCerts()
-  #labkey.setCurlOptions(ssl_verifypeer=FALSE, ssl_verifyhost=FALSE)
-  #labkey.setDefaults(apiKey="session|abcdef0123456789abcdef0123456789")
-  session <- Rlabkey::getSession(baseUrl=url,
-                     folderPath=path,
-                     curlOptions= RCurl::curlOptions(userpwd=paste(user,pwd,sep=":")),
-                     lkOptions=NULL)
-  return(session)
-}
-
 #' Create connection to Labkey
 #' @name connect.to.labkey
 #' @param file labkey credential file path, default is ~/.labkey.cred
@@ -23,14 +11,26 @@ connect.to.labkey<-function(file="~/.labkey.cred") {
   if (is.null(file))
     stop("File with url, path, user, pwd entries required for connection.")
 
-  vars = readr::read_delim(file, delim="=", col_names = F, col_types = 'cc') %>% spread(X1, X2)
+    vars = readr::read_delim(file, delim="=", col_names = F, col_types = 'cc') %>% tidyr::spread(X1, X2)
 
   if (length(grep('path|pwd|url|user', colnames(vars) )) < 4) stop('Missing information in the labkey.cred file. path,pwd,url,user are required.')
 
   return(create.connection(url=vars$url, path=vars$path, user=vars$user, pwd=vars$pwd))
 }
 
-create.connection<-function(url="https://occams.comlab.ox.ac.uk/labkey", path="/ICGC/Cohorts/All Study Subjects", user, pwd) {
+create.session<-function(url="https://occams.cs.ox.ac.uk/labkey", path="/ICGC/Cohorts/All Study Subjects", user, pwd) {
+  require(Rlabkey)
+  #  ssc <- Rlabkey::labkey.acceptSelfSignedCerts()
+  #labkey.setCurlOptions(ssl_verifypeer=FALSE, ssl_verifyhost=FALSE)
+  #labkey.setDefaults(apiKey="session|abcdef0123456789abcdef0123456789")
+  session <- Rlabkey::getSession(baseUrl=url,
+                                 folderPath=path,
+                                 curlOptions= RCurl::curlOptions(userpwd=paste(user,pwd,sep=":")),
+                                 lkOptions=NULL)
+  return(session)
+}
+
+create.connection<-function(url="https://occams.cs.ox.ac.uk/labkey", path="/ICGC/Cohorts/All Study Subjects", user, pwd) {
   session <- create.session(url,path,user,pwd)
 
   if (is.null(session))
@@ -54,10 +54,27 @@ create.connection<-function(url="https://occams.comlab.ox.ac.uk/labkey", path="/
   return(occams.session)
 }
 
+
+#' Get the table prefixes from the schema
+#' @name get.prefixes
+#' @param ocs Labkey connection
+#' @param version version for tables, default 'z1'
+#'
+#' @author skillcoyne
+#' @export
 get.prefixes<-function(ocs, version='z1') {
   return(unique(sapply(grep(version, names(ocs$schema), value=T), substr, 1, 2)))
 }
 
+
+#' List the clinical tables available in Labkey
+#' @name list.clinical.tables
+#' @param ocs Labkey connection
+#' @prefixes Only those with matches prefixes, default is the result of get.prefixes
+#' @param version version for tables, default 'z1'
+#'
+#' @author skillcoyne
+#' @export
 list.clinical.tables<-function(ocs, prefixes=NULL, versions='z1' ) {
   if (is.null(prefixes))
     prefixes = get.prefixes(ocs,versions)

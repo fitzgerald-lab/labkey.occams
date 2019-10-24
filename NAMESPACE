@@ -2,4 +2,8 @@
 
 export(connect.to.labkey)
 export(download.all.tables)
+export(download.wide.format)
+export(dump.clinical.data)
 export(get.patients)
+export(get.prefixes)
+export(list.clinical.tables)

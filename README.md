@@ -39,7 +39,7 @@ Note that the default credential file path is ~/.labkey.cred so if you put it th
 library(openclinica.occams)
 
 ocs <- connect.to.labkey(file='labkey.creds') 
-occams <- download.all.tables(ocs)
+occams <- download.wide.format(ocs)
 
 head(occams$patients)
 head(occams$tissues)

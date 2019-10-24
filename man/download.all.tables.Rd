@@ -2,7 +2,7 @@
 % Please edit documentation in R/read_oc_data.R
 \name{download.all.tables}
 \alias{download.all.tables}
-\title{Download in wide format the Labkey data for all or a selected group of patients.}
+\title{USE download.wide.format instead. This is the old method.}
 \usage{
 download.all.tables(ocs, occams_ids = NULL, missing = NULL,
   versions = "z1", verbose = T)
@@ -15,5 +15,5 @@ download.all.tables(ocs, occams_ids = NULL, missing = NULL,
 \item{verbose}{}
 }
 \description{
-Download in wide format the Labkey data for all or a selected group of patients.
+USE download.wide.format instead. This is the old method.
 }

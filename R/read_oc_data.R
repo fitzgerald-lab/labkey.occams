@@ -8,7 +8,7 @@
 #' @author skillcoyne
 #' @export
 dump.clinical.data<-function(ocs, occams_ids = NULL, prefixes=NULL, version='z1', outdir="~/tmp") {
-  out <- paste(outdir, Sys.Date(), sep="/")
+  out <- path.expand(paste(outdir, Sys.Date(), sep="/"))
 
   if (is.null(prefixes))
     prefixes = get.prefixes(ocs, version)
@@ -166,6 +166,43 @@ download.wide.format<-function(ocs, occams_ids=NULL, missing=NULL,versions='z1',
 }
 
 
+#' Get selected patients in the wide table format
+#' @name get.patients
+#' @param ocs Connection from connect.to.labkey()
+#' @param occams_ids Array of occams identifiers to select
+#'
+#' @author
+#' @export
+get.patients<-function(ocs, occams_ids, verbose=T) {
+  require(Rlabkey)
+
+  if (!inherits(ocs, "OCCAMSLabkey"))
+    stop("Create connection to OCCAMS Labkey first")
+
+  ids = grepl('^OCCAMS/[A-Z]{2}/[0-9]+', occams_ids)
+
+  incorrect_ids = occams_ids[!ids]
+  ids = occams_ids[ids]
+
+  if (verbose) message(paste("Retrieving",length(ids),"patients."))
+
+  if (length(incorrect_ids) > 0)
+    warning(paste(length(incorrect_ids)), ' are not OCCAMS identifiers.')
+
+  occams = download.wide.format(ocs=ocs, verbose=verbose, occams_ids=ids)
+
+  return(list('patients'=occams$patients, 'tissues'=occams$tissues, 'incorrect_ids'=incorrect_ids, 'withdrawn'=occams$withdrawn))
+}
+
+
+
+make.id.filter<-function(occams_ids, idCol) {
+  if (!is.null(occams_ids)) {
+    occams_ids = grep('^OCCAMS/[A-Z]{2}/[0-9]+', occams_ids, value=T)
+    return( makeFilter(c(idCol, 'IN', paste(occams_ids, collapse=';'))) )
+  }
+  return(NULL)
+}
 
 
 

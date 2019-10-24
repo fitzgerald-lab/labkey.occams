@@ -1,78 +1,28 @@
+## This file provides a function to read/clean each section of the CRF tables.  If it has only one table, like demographics, then it reads just that one.  If it has multiple tables, like the treatment tables or endpoint tables then it works to merge them such that there is only a single entry per patient. This isn't always what you may want, and the logic is more likely to run into issues with changes on the Labkey side.
 
-read.tissue.collection<-function(ocs, tables, rulesFiles=NULL, occams_ids=NULL, verbose=F, ...) {
-  z = list(...)
-  verbose = ifelse (!is.null(z$verbose), z$verbose, F)
 
-  tables = list.clinical.tables(ocs,'tc')
-
-  filter = make.id.filter(occams_ids, 'TC_StudySubjectID')
-
-  if (!inherits(ocs, "OCCAMSLabkey"))
-    stop("Create connection to OCCAMS Labkey first")
-  if (length(tables) < 2)
-    stop("Two tables are expected for tissue collection")
-
-  if (verbose) message(paste("Reading",paste(tables, collapse=",")))
-
-  # all this table tells me is if there should be entries in the second table or not
-  tc <- get.table.data(ocs=ocs, table=grep('^tc_',tables,value=T), colFilter=filter)
-
-  # There should not be duplicates in this table...
-  dups <- which(with(tc, TC.StudySubjectID %in% names(which(table(TC.StudySubjectID) > 1))))
-  duplicatePts <- tc[dups,]
-
-  warning(paste("Removing", nrow(duplicatePts), "duplicated patient rows"))
-  if (length(dups) > 0) tc <- tc[-dups, ]
-
-  samplesTaken <- tc %>% filter(TC.TissueSamplesTaken == "Yes")
-
-  # useful table
-  filter = make.id.filter(occams_ids, 'TC1_StudySubjectID')
-  tc1 <- get.table.data(ocs=ocs, table=grep('^tc1_',tables,value=T), colFilter=filter)
-
-  # But it seems the two tables may not actually match up! There are more patients in the second table then are listed in the first as having had tissue taken
-  missingEntries = setdiff(samplesTaken$TC.StudySubjectID, tc1$TC1.StudySubjectID)
-
-  # Recode for clarity
-  tc1 = tc1 %>% dplyr::mutate(
-    TC1.TissueType = recode(TC1.TissueType, 'E'="endoscopy", 'S'="surgical",'L'="laparoscopy",'R'="EMR"),
-    TC1.TissueSource = recode(TC1.TissueSource, 'N'="normal oesophagus", 'B'="barretts", 'T'="tumour", 'G'="normal gastric", 'L'="lymph node", 'M'="metastasis")
-  )
-
-  tc1 = left_join(tc1, tc, by=c('TC1.StudySubjectID'='TC.StudySubjectID')) %>% dplyr::rename('StudySubjectID'='TC1.StudySubjectID') %>%
-    select(StudySubjectID, starts_with('TC.'), starts_with('TC1.')) %>% group_by(StudySubjectID)
-
-  if (verbose) message(paste(nrow(tc1), "tissues"))
-
-  return(tc1)
-}
-
-make.id.filter<-function(occams_ids, idCol) {
-  if (!is.null(occams_ids)) {
-    occams_ids = grep('^OCCAMS/[A-Z]{2}/[0-9]+', occams_ids, value=T)
-    return( makeFilter(c(idCol, 'IN', paste(occams_ids, collapse=';'))) )
-  }
-  return(NULL)
+merge.patient.tables<-function(df1, df2, ...) {
+  newDF <- merge.data.frame(df1, df2, by='row.names', ...)
+  rownames(newDF) <- newDF[['Row.names']]
+  newDF[['Row.names']] <- NULL
+  return(newDF)
 }
 
 read.demographics<-function(ocs, table, occams_ids=NULL, rulesFile=NULL, ...) {
-  table = list.clinical.tables(ocs,'di')
+  table = get.tables.by.crf(ocs, 'demographics')
   z = list(...)
   verbose = ifelse (!is.null(z$verbose), z$verbose, F)
 
   filter = make.id.filter(occams_ids,'DI_StudySubjectID')
 
   if (inherits(ocs, "OCCAMSLabkey")) {
-    #stop("Create connection to OCCAMS Labkey first")
     if (verbose) message(paste("Reading",table))
-    di <- get.table.data(ocs=ocs, table=table,  rulesFile=rulesFile, colFilter=filter)
+    di <- get.table.data(ocs=ocs, table=table, rulesFile=rulesFile, colFilter=filter)
   } else {
     di <- read.table.data(table,  rulesFile=rulesFile)
   }
 
-  #di$DI.ageAtDiagnosis <- as.numeric(di$DI.ageAtDiagnosis)
-  # Prefer to get this from FE tables
-
+  # Prefer to get this DoD from FE tables
   di <- di %>% select(-DI.StudyNumber, -contains('Panther'), -contains('OpenClinica'), -contains('CRF'),-contains('DateOfDeath'))
 
   if (verbose) message(paste(nrow(di), "patients"))
@@ -83,7 +33,7 @@ read.exposures<-function(ocs, tables, occams_ids=NULL, rulesFiles=NULL, ...) {
   z = list(...)
   verbose = ifelse (!is.null(z$verbose), z$verbose, F)
 
-  tables = list.clinical.tables(ocs,'ex')
+  tables = get.tables.by.crf(ocs, 'exposures')
 
   if (length(tables) != 3)
     stop("Three tables expected for exposures")
@@ -121,11 +71,12 @@ read.exposures<-function(ocs, tables, occams_ids=NULL, rulesFiles=NULL, ...) {
   return(list('ex'=ex, 'history'=ex_history))
 }
 
+# TODO need to add the recurrence tables to this
 read.endpoints<-function(ocs, tables, occams_ids=NULL, rulesFiles=NULL, ...) {
   z = list(...)
   verbose = ifelse (!is.null(z$verbose), z$verbose, F)
 
-  tables = list.clinical.tables(ocs,c('fe','ep'))
+  tables = get.tables.by.crf(ocs, c('follow-up','endpoint'))
 
   if (length(tables) != 3)
     stop("Three tables expected for endpoints")
@@ -192,7 +143,7 @@ read.prestage<-function(ocs, tables, occams_ids=NULL, rulesFiles=NULL, ...) {
   z = list(...)
   verbose = ifelse (!is.null(z$verbose), z$verbose, F)
 
-  tables = list.clinical.tables(ocs,'ps')
+  tables = get.tables.by.crf(ocs, 'pretreatment staging')
 
   if (length(tables) != 7)
     warning("Seven tables are expected for prestaging, currently only the final tables is read.")
@@ -233,11 +184,12 @@ read.prestage<-function(ocs, tables, occams_ids=NULL, rulesFiles=NULL, ...) {
   return(list('ps' = ps, 'duplicates' = duplicatePts))
 }
 
+
 read.treatment.plan<-function(ocs, tables, occams_ids=NULL, rulesFiles=NULL, ...) {
   z = list(...)
   verbose = ifelse (!is.null(z$verbose), z$verbose, F)
 
-  tables = list.clinical.tables(ocs,'tp')
+  tables = get.tables.by.crf(ocs, 'treatment plan')
 
   if (length(tables) < 2)
     stop("Two tables are expected for treatment plans, currently using only primary table.")
@@ -264,11 +216,12 @@ read.treatment.plan<-function(ocs, tables, occams_ids=NULL, rulesFiles=NULL, ...
   return(list('tp'=tp,'duplicates'=duplicatePts))
 }
 
+# TODO, need to find a way to read/include the other tables
 read.therapy<-function(ocs, tables, occams_ids=NULL, rulesFiles=NULL, ...) {
   z = list(...)
   verbose = ifelse (!is.null(z$verbose), z$verbose, F)
 
-  tables = list.clinical.tables(ocs,'tr')
+  tables = get.tables.by.crf(ocs, 'therapy record')
 
   if (length(tables) < 7)
     warning("Seven tables are expected for therapy, currently only the primary table is read.")
@@ -289,6 +242,7 @@ read.therapy<-function(ocs, tables, occams_ids=NULL, rulesFiles=NULL, ...) {
     trnc <- get.table.data(ocs,grep('^trnc', tables, value=T))
     trnc = full_join(tr, trnc, by=c('TR.StudySubjectID'='TRNC.StudySubjectID'))
 
+    # Select one of the two records to report. This is because a new table was added that will record patients (starting Oct 2018 I think) but the old table still exists. No data was backfilled.
     trnc = trnc %>% dplyr::group_by(TR.StudySubjectID) %>% dplyr::summarise(
       TR.NeoAdj.Chemotherapy.Treatments = n(),
       TR.NeoAdj.ChemotherapyDateFirstCycleStarted = mr(TR.ChemotherapyDateFirstCycleStarted, TRNC.ChemotherapyDateFirstCycleStarted),
@@ -316,7 +270,7 @@ read.therapy<-function(ocs, tables, occams_ids=NULL, rulesFiles=NULL, ...) {
     tre <- get.table.data(ocs,grep('^tre0_', tables, value=T))
     tr = full_join(tr, tre %>% select(-contains('StudySite')), by=c('TR.StudySubjectID'='TRE0.StudySubjectID')) %>% rename_all(funs(sub('^TRE0', 'TR',.))) %>% dplyr::group_by(TR.StudySubjectID) %>% select(-contains('StudySite')) %>% dplyr::summarise_all(funs(cl)) %>% ungroup %>% mutate_all(funs(ifelse(.=='', NA, .))) %>% group_by(TR.StudySubjectID)
 
-    # These tabels were added only recently and they were not backfilled so there are not many patients in each, can deal with them later when/if needed
+    # TODO: These tabels were added only recently and they were not backfilled so there are not many patients in each, can deal with them later when/if needed
     # radiotherapy -- later
     trr <- get.table.data(ocs,grep('^trr_', tables, value=T))
 
@@ -326,15 +280,12 @@ read.therapy<-function(ocs, tables, occams_ids=NULL, rulesFiles=NULL, ...) {
     # palliative chemo -- later
     trac <- get.table.data(ocs,grep('^trpc_', tables, value=T))
 
-
     # other therapy -- later
     tro <- get.table.data(ocs,grep('^tro_', tables, value=T))
 
   } else {
     #tr <- read.table.data(tables[grep('^tr_', basename(tables))],  rulesFile=rulesFiles[1])
   }
-
-
 
   tr = tr %>% dplyr::mutate( TR.Chemotherapy = factor(ifelse((grepl('chemo', TR.CurativeTreatmentModality, ignore.case=T) |
                                                                 grepl('chemo', TR.PalliativeTreatmentModality, ignore.case=T)), 'yes','no'),levels=c('yes','no') ),
@@ -366,11 +317,12 @@ read.therapy<-function(ocs, tables, occams_ids=NULL, rulesFiles=NULL, ...) {
   return(tr)
 }
 
+
 read.surgery<-function(ocs, table, occams_ids=NULL, rulesFile=NULL, ...) {
   z = list(...)
   verbose = ifelse (!is.null(z$verbose), z$verbose, F)
 
-  table = list.clinical.tables(ocs,'st')
+  table = get.tables.by.crf(ocs, 'surgical treatment')
 
   if (inherits(ocs, "OCCAMSLabkey")) {
     if (verbose) message(paste("Reading",table))
@@ -385,6 +337,7 @@ read.surgery<-function(ocs, table, occams_ids=NULL, rulesFile=NULL, ...) {
   duplicatePts <- st[dups,]
   if (length(dups) > 0) st <- st[-dups, ]
 
+  # A patient may be recorded as getting surgery (ST.MainSurgery) but ultimately not receive surgery. A patient may also undergo surgery but have no resection pathology as the surgeon will have not been able to complete it.
   st = st %>% rowwise %>% dplyr::mutate(
     ST.SurgeryPerformed = factor(ifelse(ST.MainSurgery == 'yes' & (is.na(ST.ReasonIfNoSurgery) | is.na(ST.OtherReasonForNoSurgery)), 'yes', 'no'), levels=c('yes','no')),
     ST.PathologyReportGenerated = factor(ifelse(ST.SurgeryPerformed == 'yes' & !grepl("Open (and|&) Shut", ST.Procedure, ignore.case=T),'yes', 'no'), levels=c('yes','no')),
@@ -402,7 +355,7 @@ read.pathology<-function(ocs, table, occams_ids=NULL, rulesFile=NULL, ...) {
   z = list(...)
   verbose = ifelse (!is.null(z$verbose), z$verbose, F)
 
-  table = list.clinical.tables(ocs,'rp')
+  table = get.tables.by.crf(ocs, 'resection pathology')
 
   filter = make.id.filter(occams_ids,'RP_StudySubjectID')
 
@@ -420,6 +373,7 @@ read.pathology<-function(ocs, table, occams_ids=NULL, rulesFile=NULL, ...) {
 
   rp <- fix.tumor.factors(text.to.tstage(rp))
 
+  # The grades are too granular.
   diff.grade<-function(x) {
     if ( grepl('.*poor',x)  ) { # poor & moderate_to_poor
       return('poor')
@@ -429,6 +383,7 @@ read.pathology<-function(ocs, table, occams_ids=NULL, rulesFile=NULL, ...) {
     return(x)
   }
 
+  # Add a TNM column assessed based on the Tstage, Nstage, and Mstage. Add a differentiation column with fewer variables, recode the response column for easier reading. Finally, add a BE adjacent column that assess both Microscopic and Macroscopic columns for a binary response.
   rp = rp %>% ungroup %>% rowwise %>% dplyr::mutate(
     RP.TNMStage.c = tnmStage(RP.TStage.PrimaryTumour, RP.Nstage.RP.TNM7, RP.MStage.DistantMetastasis),
     RP.TumourDifferentiation.c = diff.grade(RP.TumourGradingDifferentiationStatus)) %>%
@@ -440,6 +395,7 @@ read.pathology<-function(ocs, table, occams_ids=NULL, rulesFile=NULL, ...) {
       RP.BarrettsAdjacentToTumour.c = ifelse(RP.BarettsAdjacentToTumourMicroscopicIM == 'yes' | RP.BarettsAdjacentToTumourMacroscopic == 'yes','yes','no')
     )
 
+  # This was a check performed by skillcoyne and chughes in 2016 Sept to evaluate the entry of BE information into OpenClinica. Only AH patients were evaluated.  This file alters the BE adjacent information for only those patients.
   file = system.file("extdata", "be_updates_20160930.txt", package="openclinica.occams")
   if (!exists('be_updates') & (!is.null(file) & file.exists(file))) {
     if (verbose) message(paste("Reading", file))
@@ -465,7 +421,7 @@ read.referral.diagnosis<-function(ocs, tables, occams_ids=NULL, rulesFile=NULL, 
   z = list(...)
   verbose = ifelse (!is.null(z$verbose), z$verbose, F)
 
-  tables = list.clinical.tables(ocs,'rd')
+  tables = get.tables.by.crf(ocs, 'referral diagnosis')
 
   filter = make.id.filter(occams_ids,'RD_StudySubjectID')
   filter2 = make.id.filter(occams_ids, 'RDA_StudySubjectID')
@@ -486,9 +442,52 @@ read.referral.diagnosis<-function(ocs, tables, occams_ids=NULL, rulesFile=NULL, 
   return(rd)
 }
 
-merge.patient.tables<-function(df1, df2, ...) {
-  newDF <- merge.data.frame(df1, df2, by='row.names', ...)
-  rownames(newDF) <- newDF[['Row.names']]
-  newDF[['Row.names']] <- NULL
-  return(newDF)
+# Not a clinical table and I don't know how up to date this is but I pull it anyhow.  I should do the same for blood and ctdna but currently I don't.
+read.tissue.collection<-function(ocs, tables, rulesFiles=NULL, occams_ids=NULL, verbose=F, ...) {
+  z = list(...)
+  verbose = ifelse (!is.null(z$verbose), z$verbose, F)
+
+  tables = list.clinical.tables(ocs,'tc')
+
+  filter = make.id.filter(occams_ids, 'TC_StudySubjectID')
+
+  if (!inherits(ocs, "OCCAMSLabkey"))
+    stop("Create connection to OCCAMS Labkey first")
+  if (length(tables) < 2)
+    stop("Two tables are expected for tissue collection")
+
+  if (verbose) message(paste("Reading",paste(tables, collapse=",")))
+
+  # all this table tells me is if there should be entries in the second table or not
+  tc <- get.table.data(ocs=ocs, table=grep('^tc_',tables,value=T), colFilter=filter)
+
+  # There should not be duplicates in this table...
+  dups <- which(with(tc, TC.StudySubjectID %in% names(which(table(TC.StudySubjectID) > 1))))
+  duplicatePts <- tc[dups,]
+
+  warning(paste("Removing", nrow(duplicatePts), "duplicated patient rows"))
+  if (length(dups) > 0) tc <- tc[-dups, ]
+
+  samplesTaken <- tc %>% filter(TC.TissueSamplesTaken == "Yes")
+
+  # useful table
+  filter = make.id.filter(occams_ids, 'TC1_StudySubjectID')
+  tc1 <- get.table.data(ocs=ocs, table=grep('^tc1_',tables,value=T), colFilter=filter)
+
+  # But it seems the two tables may not actually match up! There are more patients in the second table then are listed in the first as having had tissue taken
+  missingEntries = setdiff(samplesTaken$TC.StudySubjectID, tc1$TC1.StudySubjectID)
+
+  # Recode for clarity
+  tc1 = tc1 %>% dplyr::mutate(
+    TC1.TissueType = recode(TC1.TissueType, 'E'="endoscopy", 'S'="surgical",'L'="laparoscopy",'R'="EMR"),
+    TC1.TissueSource = recode(TC1.TissueSource, 'N'="normal oesophagus", 'B'="barretts", 'T'="tumour", 'G'="normal gastric", 'L'="lymph node", 'M'="metastasis")
+  )
+
+  tc1 = left_join(tc1, tc, by=c('TC1.StudySubjectID'='TC.StudySubjectID')) %>% dplyr::rename('StudySubjectID'='TC1.StudySubjectID') %>%
+    select(StudySubjectID, starts_with('TC.'), starts_with('TC1.')) %>% group_by(StudySubjectID)
+
+  if (verbose) message(paste(nrow(tc1), "tissues"))
+
+  return(tc1)
 }
+

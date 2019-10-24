@@ -11,7 +11,9 @@ connect.to.labkey<-function(file="~/.labkey.cred") {
   if (is.null(file))
     stop("File with url, path, user, pwd entries required for connection.")
 
-    vars = readr::read_delim(file, delim="=", col_names = F, col_types = 'cc') %>% tidyr::spread(X1, X2)
+  file = path.expand(file)
+
+  vars = readr::read_delim(file, delim="=", col_names = F, col_types = 'cc') %>% tidyr::spread(X1, X2)
 
   if (length(grep('path|pwd|url|user', colnames(vars) )) < 4) stop('Missing information in the labkey.cred file. path,pwd,url,user are required.')
 
@@ -59,13 +61,30 @@ create.connection<-function(url="https://occams.cs.ox.ac.uk/labkey", path="/ICGC
 #' @name get.prefixes
 #' @param ocs Labkey connection
 #' @param version version for tables, default 'z1'
-#'
+#' @param type All or only CRF prefixes, default 'clinical'
 #' @author skillcoyne
 #' @export
-get.prefixes<-function(ocs, version='z1') {
+get.prefixes<-function(ocs, version=NULL, type=c('clinical','all')) {
+  rettype = match.arg(type)
+
+  if (is.null(version))
+    version = unique(crf.prefixes$version)
+
+  if (rettype == 'clinical') return(crf.prefixes$prefix)
+
   return(unique(sapply(grep(version, names(ocs$schema), value=T), substr, 1, 2)))
 }
 
+#' Tibble for clinical table prefixes current 2019 Oct
+#' @name crf.prefixes
+#' @export
+crf.prefixes<-tibble(
+  table = c( 'demographics','exposures','referral diagnosis','pretreatment staging',
+             'treatment plan','therapy record','surgical treatment','resection pathology',
+             'recurrence','follow-up','endpoint'),
+  prefix = c( 'di','ex','rd','ps','tp','tr','st','rp','fr','fe','ep'),
+  version = 'z1'
+)
 
 #' List the clinical tables available in Labkey
 #' @name list.clinical.tables
@@ -75,25 +94,34 @@ get.prefixes<-function(ocs, version='z1') {
 #'
 #' @author skillcoyne
 #' @export
-list.clinical.tables<-function(ocs, prefixes=NULL, versions='z1' ) {
+list.clinical.tables<-function(ocs, prefixes=NULL) {
   if (is.null(prefixes))
-    prefixes = get.prefixes(ocs,versions)
+    prefixes = crf.prefixes$prefix
 
   if (!inherits(ocs, "OCCAMSLabkey"))
     stop("Create connection to OCCAMS Labkey first")
 
-  tables <- grep( paste('^(', paste( paste(prefixes, '.+', versions,sep=''), collapse='|'), ')', sep=''), names(ocs$schema), value=T)
+  tables <- grep( paste('^(', paste( paste(prefixes, '.+', unique(crf.prefixes$version),sep=''), collapse='|'), ')', sep=''), names(ocs$schema), value=T)
   if (length(tables) < length(prefixes))
     warning("Fewer tables found than prefixes provided.")
 
   return(tables)
 }
 
-# rows.as.patient.id<-function(rows, uniqueID=NULL) {
-#   if (!is.null(uniqueID) & is.numeric(uniqueID))
-#     rownames(rows) <- rows[,uniqueID]
-#   return(rows)
-# }
+#' Get tables for the given CRF term (see crf.prefixes) or prefix.
+#' @name get.tables.by.crf
+#' @param ocs Labkey connection
+#' @term
+#'
+#' @author skillcoyne
+#' @export
+get.tables.by.crf<-function(ocs, crf) {
+  crf = tolower(crf)
+  tb = crf.prefixes %>% filter(table %in% crf | prefix %in% crf)
+  list.clinical.tables(ocs, tb$prefix)
+}
+
+
 
 read.table.data<-function(f, columns=NULL, uniqueID=NULL, rulesFile=NULL, ...) {
   require(data.table)
@@ -114,6 +142,8 @@ get.table.data<-function(ocs, table, columns=NULL, uniqueID='StudySubjectID', ru
   } else {
     if (length(columns > 1)) columns <- paste(columns, collapse=",")
     rows <- suppressWarnings(Rlabkey::getRows(ocs$session, ocs$schema[[table]], colSelect=columns, ...))
+    if (nrow(rows) <= 0)
+      stop("No rows found that matched the column filters.")
   }
 
   rows <- suppressWarnings(clean.rows(rows, uniqueID, rulesFile))
@@ -160,19 +190,19 @@ editrules<-function(file, df, verbose=T) {
 
   # Numeric
   cols = rules %>% filter(Def == 'numeric') %>% select(Column) %>% pull
-  df = df %>% ungroup %>% mutate_at(cols, funs(as.numeric))
+  if (length(cols) > 0) df = df %>% ungroup %>% mutate_at(cols, funs(as.numeric))
 
   # Date
   cols = rules %>% filter(Def == 'date') %>% select(Column) %>% pull
-  df = df %>% ungroup %>% mutate_at(cols, funs(as.Date))
+  if (length(cols) > 0) df = df %>% ungroup %>% mutate_at(cols, funs(as.Date))
 
   # Character
   cols = rules %>% filter(Def == 'character') %>% select(Column) %>% pull
-  df = df %>% ungroup %>% mutate_at(cols, funs(as.character))
+  if (length(cols) > 0) df = df %>% ungroup %>% mutate_at(cols, funs(as.character))
 
   # Factor TODO -- not sure how to make specfic rules work with dplyr
   cols = rules %>% filter(Def == 'factor') %>% select(Column) %>% pull
-  df = df %>% mutate_at(cols, funs(as.factor))
+  if (length(cols) > 0) df = df %>% mutate_at(cols, funs(as.factor))
 
   failed <- apply(rules,1, function(x) {
     if (length(intersect(x[['Column']], colnames(df))) <= 0) {
@@ -181,10 +211,13 @@ editrules<-function(file, df, verbose=T) {
       which(!with(df, eval(parse(text=paste(x[['Rule']], collapse="")))))
     }
   })
-  names(failed) <- rules$Column
 
-  for (n in names(failed)) {
-    df[failed[[n]], n] <- NA
+  if (length(failed) > 0) {
+    names(failed) <- rules$Column
+
+    for (n in names(failed)) {
+      df[failed[[n]], n] <- NA
+    }
   }
 
   df = df %>% group_by_at(groups)
@@ -193,30 +226,3 @@ editrules<-function(file, df, verbose=T) {
 }
 
 
-#' Get selected patients in the wide table format
-#' @name get.patients
-#' @param ocs Connection from connect.to.labkey()
-#' @param occams_ids Array of occams identifiers to select
-#'
-#' @author
-#' @export
-get.patients<-function(ocs, occams_ids, verbose=F) {
-  require(Rlabkey)
-
-  if (!inherits(ocs, "OCCAMSLabkey"))
-    stop("Create connection to OCCAMS Labkey first")
-
-  ids = grepl('^OCCAMS/[A-Z]{2}/[0-9]+', occams_ids)
-
-  incorrect_ids = occams_ids[!ids]
-  ids = occams_ids[ids]
-
-  if (verbose) message(paste("Retrieving",length(ids),"patients."))
-
-  if (length(incorrect_ids) > 0)
-    warning(paste(length(incorrect_ids)), ' are not OCCAMS identifiers.')
-
-  occams = download.all.tables(ocs=ocs, verbose=verbose, occams_ids=ids)
-
-  return(list('patients'=occams$patients, 'tissues'=occams$tissues, 'incorrect_ids'=incorrect_ids, 'withdrawn'=occams$withdrawn))
-}

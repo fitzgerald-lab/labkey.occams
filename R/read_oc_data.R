@@ -114,7 +114,7 @@ download.wide.format<-function(ocs, occams_ids=NULL, missing=NULL,versions='z1',
   if (verbose) message(paste("Final patient total:", nrow(all)))
 
   all <- prestage.to.path(all)
-
+## TODO: CHECK THAT I"M LOOKINGF AT FR1 table
   # Calculated columns
   #all %>% select(matches('\\.c$'))
 

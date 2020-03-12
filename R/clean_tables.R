@@ -23,7 +23,7 @@ read.demographics<-function(ocs, table, occams_ids=NULL, rulesFile=NULL, ...) {
   }
 
   # Prefer to get this DoD from FE tables
-  di <- di %>% select(-DI.StudyNumber, -contains('Panther'), -contains('OpenClinica'), -contains('CRF'),-contains('DateOfDeath'))
+  di <- di %>% select(-DI.StudyNumber, -contains('Panther'), -contains('OpenClinica'), -contains('CRF'),-contains('DateOfDeath'), -DI.PatientEthnicityComment, -DI.ageAtDiagnosis.months)
 
   if (verbose) message(paste(nrow(di), "patients"))
   return(di)
@@ -44,7 +44,7 @@ read.exposures<-function(ocs, tables, occams_ids=NULL, rulesFiles=NULL, ...) {
 
   if (inherits(ocs, "OCCAMSLabkey")) {
     #stop("Create connection to OCCAMS Labkey first")
-    if (verbose) message(paste("Reading",paste(tables, collapse=',')))
+    if (verbose) message(paste("Reading",paste(tables, collapse=', ')))
     ex <- get.table.data(ocs=ocs, table=grep('^ex_',tables,value=T),  rulesFile=rulesFiles[1], colFilter=filter)
     ex_history_gastric <- get.table.data(ocs=ocs, table=grep('ex.*gastric',tables,value=T), rulesFile=rulesFiles[2], colFilter=filter1)
     ex_history_other <- get.table.data(ocs=ocs, table=grep('ex.*other_cancer',tables,value=T), rulesFile=rulesFiles[3], colFilter=filter2)
@@ -55,86 +55,146 @@ read.exposures<-function(ocs, tables, occams_ids=NULL, rulesFiles=NULL, ...) {
     ex_history_other <- read.table.data(tables[3], rulesFile=rulesFiles[3])
   }
 
-  ex = ex %>% mutate_at(vars(grep('Height|Weight|BMI|Weeks|Months|Years|Days', colnames(.))), funs(as.numeric))
-
   # -1 is often used for NA in the numeric columns
-  ex = ex %>% mutate_if( is.numeric, funs(ifelse(.<0,NA,.)))
-
-  ex = ex %>% mutate(EX.CurrentWeightKG = ifelse(EX.CurrentWeightKG>140 | EX.CurrentWeightKG<22, NA, EX.CurrentWeightKG),
+    ex = ex %>% 
+      mutate_at(vars(grep('Height|Weight|BMI|Weeks|Months|Years|Days', colnames(.))), funs(as.numeric)) %>%
+      mutate_if( is.numeric, funs(ifelse(.<0,NA,.))) %>% 
+      group_by(EX.StudySubjectID) %>% 
+      mutate(EX.CurrentWeightKG = ifelse(EX.CurrentWeightKG>140 | EX.CurrentWeightKG<22, NA, EX.CurrentWeightKG),
                      EX.CurrentHeightCM = ifelse(EX.CurrentHeightCM>215 | EX.CurrentHeightCM<60, NA, EX.CurrentHeightCM),
-                     EX.CurrentBMI = bmicalc(EX.CurrentWeightKG,EX.CurrentHeightCM))
+                     EX.CurrentBMI.c = bmicalc(EX.CurrentWeightKG,EX.CurrentHeightCM),
+                     EX.5YearsAgoBMI.c = bmicalc(EX.5YearsAgoWeightKG,EX.5YearsAgoHeightCM))
 
+  # These two are always NA, seem to have moved to the other tables
+  ex = dplyr::select(ex, -EX.FamilyHistoryOfOtherCancerRelationship, -EX.FamilyHistoryOfOesophagoGastricCancerRelationship)
+  
   if (verbose) message(paste(nrow(ex), "patients"))
 
-  ex_history = full_join(ex_history_gastric, ex_history_other, by=c("EX1.StudySubjectID"="EX2.StudySubjectID")) %>% ungroup
+  ex_history = full_join(ex_history_gastric, ex_history_other, by=c("EX1.StudySubjectID"="EX2.StudySubjectID")) %>%
+    dplyr::select(-matches('StudySite')) %>%
+    dplyr::rename_all(list(~sub('^EX\\d','EX',.))) %>% ungroup %>%
+    dplyr::mutate_at(vars(EX.FamilyHistoryOfOesophagoGastricCancerLocation, EX.FamilyHistoryOfOesophagoGastricCancerRelationship,EX.FamilyHistoryOfOtherCancerType,EX.FamilyHistoryOfOtherCancerRelationship), list(~factor(.)))
 
   return(list('ex'=ex, 'history'=ex_history))
 }
 
-# TODO need to add the recurrence tables to this
-read.endpoints<-function(ocs, tables, occams_ids=NULL, rulesFiles=NULL, ...) {
+
+read.endpoint<-function(ocs, tables, occams_ids=NULL, rulesFile=NULL, ...) {
   z = list(...)
   verbose = ifelse (!is.null(z$verbose), z$verbose, F)
-
-  tables = get.tables.by.crf(ocs, c('follow-up','endpoint'))
-
-  if (length(tables) != 3)
-    stop("Three tables expected for endpoints")
-
-  filter = make.id.filter(occams_ids,'FE_StudySubjectID')
-  filter1 = make.id.filter(occams_ids,'FE1_StudySubjectID')
-  filter2 = make.id.filter(occams_ids, 'EP_StudySubjectID')
-
+  
+  table = get.tables.by.crf(ocs, c('endpoint'))
+  filter = make.id.filter(occams_ids, 'EP_StudySubjectID')
+  
   if (inherits(ocs, "OCCAMSLabkey")) {
     #stop("Create connection to OCCAMS Labkey first")
     if (verbose) message(paste("Reading",paste(tables, collapse=",")))
+    ep <- get.table.data(ocs,grep('ep',tables,value=T), rulesFile=rulesFile, colFilter=filter)
+  } else {
+    if (verbose) message(paste("Reading",paste(basename(tables), collapse=", ")))
+    ep <- read.table.data(table,  rulesFile=rulesFile)
+  }
+  ep %<>% ungroup %>% dplyr::mutate_at(vars(EP.EndPoint,EP.ReasonForPatientDeath), list(~factor(.)))
+  
+  ep %<>% group_by(EP.StudySubjectID) %>% 
+    dplyr::mutate(Patient.Died = ifelse(EP.EndPoint == 'Patient died', 'yes','no') ) %>%
+    ungroup %>% dplyr::mutate(Patient.Died = factor(Patient.Died))
+  
+  return(ep)
+}
 
-    fe <- get.table.data(ocs,grep('fe_',tables,value=T),  rulesFile=rulesFiles[1], colFilter=filter)
-    # EP appears to be set up to replace FE
-    ep <- get.table.data(ocs,grep('ep',tables,value=T), rulesFile=grep('ep_',rulesFiles,value=T), colFilter=filter2)
+
+# TODO need to add the recurrence tables to this
+read.followup<-function(ocs, tables, occams_ids=NULL, rulesFiles=NULL, ...) {
+  z = list(...)
+  verbose = ifelse (!is.null(z$verbose), z$verbose, F)
+
+  tables = get.tables.by.crf(ocs, c('endpoint','follow-up', 'recurrence'))
+
+  if (length(tables) < 6)
+    stop("Six tables expected for endpoint, follow-up, and recurrence.")
+
+  filterEP = make.id.filter(occams_ids, 'EP_StudySubjectID')
+  filterFE = make.id.filter(occams_ids,'FE_StudySubjectID')
+  filterFE1 = make.id.filter(occams_ids,'FE1_StudySubjectID')
+  filterR = make.id.filter(occams_ids, 'FR_StudySubjectID')
+  filterR0 = make.id.filter(occams_ids, 'FR0_StudySubjectID')
+  filterR1 = make.id.filter(occams_ids, 'FR1_StudySubjectID')
+
+  if (inherits(ocs, "OCCAMSLabkey")) {
+    #stop("Create connection to OCCAMS Labkey first")
+    if (verbose) message(paste("Reading tables:\n\t",paste(tables, collapse="\n\t ")))
+
+    # EP appears to be set up to replace FE, except new values are continuing to appear in both so they'll need some merging
+    ep <- get.table.data(ocs,grep('ep',tables,value=T), rulesFile=grep('ep_', rulesFiles, value=T), colFilter=filterEP)
+    fe <- get.table.data(ocs,grep('fe_',tables,value=T),  rulesFile=grep('fe_', rulesFiles,value=T), colFilter=filterFE)
 
     feep = full_join(fe,ep,by=c('FE.StudySubjectID'='EP.StudySubjectID')) %>%
       dplyr::group_by(FE.StudySubjectID) %>%
-      rowwise %>% dplyr::mutate(
-        EP.StudySite = mr(FE.StudySite, EP.StudySite),
-        EP.EndPoint = mr(FE.EndPoint, EP.EndPoint),
-        EP.DateOfPatientDeath = mr(FE.DateOfPatientDeath,EP.DateOfPatientDeath),
-        EP.ReasonForPatientDeath = mr(FE.ReasonForPatientDeath, EP.ReasonForPatientDeath),
-        EP.ReasonForPatientDeathOther = mr(FE.ReasonForPatientDeathOther, EP.ReasonForPatientDeathOther)
-      ) %>% dplyr::select(FE.StudySubjectID, starts_with('EP'), -contains('OpenClinica'))
+      dplyr::mutate(
+        FE.StudySite = mr(FE.StudySite, EP.StudySite),
+        FE.EndPoint = case_when(
+          (FE.EndPoint == 'Patient died' | EP.EndPoint == 'Patient died') ~ 'Patient died', 
+          (FE.EndPoint == 'Follow-up ended' | EP.EndPoint == 'Follow-up ended') ~ 'Follow-up ended', 
+          TRUE ~ as.character(mr(FE.EndPoint, EP.EndPoint)) ),
+        FE.DateOfPatientDeath = mr(FE.DateOfPatientDeath,EP.DateOfPatientDeath),
+        FE.ReasonForPatientDeath = mr(FE.ReasonForPatientDeath, EP.ReasonForPatientDeath),
+        FE.ReasonForPatientDeathOther = mr(FE.ReasonForPatientDeathOther, EP.ReasonForPatientDeathOther) ) %>% 
+      dplyr::select(starts_with('FE'), -contains('OpenClinica'), -matches('FE.ageAtDeath'))
 
-    fe2 <- get.table.data(ocs,grep('fe1',tables,value=T), rulesFile=grep('fe1_',rulesFiles,value=T), colFilter=filter1)
-
-    fe2 = fe2 %>% dplyr::group_by(FE1.StudySubjectID) %>% arrange(desc(FE1.DateOfUpdate)) %>% filter(!grepl('death', FE1.ReasonForFollowUp)) %>%
-      dplyr::summarise(FE1.DateOfUpdate=FE1.DateOfUpdate[1],
-                       FE1.ReasonForFollowUp=FE1.ReasonForFollowUp[1],
-                       FE1.HasOriginalDiseaseReoccurred=FE1.HasOriginalDiseaseReoccurred[1])
+    fe1 <- get.table.data(ocs,grep('fe1_',tables,value=T),  rulesFile=grep('fe1_', rulesFiles,value=T), colFilter=filterFE1)
+    
+    dis.r<-function(hasR, dateR, dateU, i) {
+      n = which(hasR == 'Yes')[1]
+      
+      if (length(n) <= 0) {
+        return( c('No',NA)[i] )
+      } else if (i == 1) {
+        return(hasR[n])
+      } else {
+        date = dateR[n]
+        if (is.na(date)) date = dateU[n]
+        return( as.Date(date) )
+      }
+    return(NA)            
+    }
+    
+    fe1 %<>% dplyr::group_by(FE1.StudySubjectID) %>%
+      arrange(desc(FE1.DateOfUpdate)) %>% 
+      #filter(!grepl('death', FE1.ReasonForFollowUp)) %>%
+      dplyr::summarise(FE.LatestDateOfUpdate.c=FE1.DateOfUpdate[1],
+                       FE.LatestReasonForFollowUp.=FE1.ReasonForFollowUp[1],
+                       #FE.HasOriginalDiseaseReoccurred.c=FE1.HasOriginalDiseaseReoccurred[1],
+                       FE.HasOriginalDiseaseReoccurred = dis.r(FE1.HasOriginalDiseaseReoccurred,FE1.DateOriginalDiseaseReoccurred,FE1.DateOfUpdate,1),
+                       FE.DateOriginalDiseaseReoccurred = dis.r(FE1.HasOriginalDiseaseReoccurred,FE1.DateOriginalDiseaseReoccurred,FE1.DateOfUpdate,2) ) 
+                         
+    feep = left_join(feep, fe1, by=c('FE.StudySubjectID'='FE1.StudySubjectID'))
+    
+    
+    # Reoccurance
+    
+    filterR = make.id.filter(occams_ids, 'FR_StudySubjectID')
+    filterR0 = make.id.filter(occams_ids, 'FR0_StudySubjectID')
+    filterR1 = make.id.filter(occams_ids, 'FR1_StudySubjectID')
+    
+    
+    fr <- get.table.data(ocs,grep('fr_',tables,value=T), rulesFile=NULL, colFilter=filterR)
+    
+    
+    
   } else {
-    if (verbose) message(paste("Reading",paste(basename(tables), collapse=", ")))
-
+    #if (verbose) message(paste("Reading",paste(basename(tables), collapse=", ")))
     #fe <- read.table.data(tables[1],  rulesFile=rulesFiles[1])
     #fe2 <- read.table.data(tables[2], rulesFile=rulesFiles[2])
     #fe2 <- ddply( ddply(fe2, .(FE1.StudySubjectID), arrange, desc(FE1.DateOfUpdate)),
     #              .(FE1.StudySubjectID, FE1.StudySite), plyr::summarise, FE1.DateOfUpdate=FE1.DateOfUpdate[1], FE1.ReasonForFollowUp=FE1.ReasonForFollowUp[1], FE1.HasOriginalDiseaseReoccurred=FE1.HasOriginalDiseaseReoccurred[1])
   }
+  
+  feep %<>% ungroup %>% dplyr::mutate_at(vars(FE.EndPoint, FE.ReasonForPatientDeath), list(~factor(.)))
 
-  # Final endpoint
-  feF = left_join(feep, fe2, by=c('FE.StudySubjectID'='FE1.StudySubjectID')) %>% group_by(FE.StudySubjectID) %>% dplyr::rename_all( funs(sub('^FE1','FE',.)) )
-
-  # withdrawn from study -- turns out we can still use the data we have jsut cannot track them further
-  withdrawn = feF %>% filter(grepl('withdraw', EP.EndPoint))
-
-  #withdrawn <- feF[rows,]
-  #if (length(rows) > 0) feF <- feF[-rows,]
-
-  feF = feF %>% rowwise %>% dplyr::mutate(
-    EP.EndPoint = ifelse(!is.na(EP.ReasonForPatientDeath),'Patient died', EP.EndPoint),
-    FE.Patient.Died = factor(ifelse(!is.na(EP.EndPoint) & EP.EndPoint == 'Patient died', 'yes','no')))
-
-  # this column disappeared when I checked 2019/02
-  #feF$FE.CancerFree.Discharge <- as.factor(with(feF, grepl("discharge", FE.AdditionalDetailsForPatientEndPoint, ignore.case=T) & (FE.EndPoint != 'Patient died' | is.na(FE.EndPoint))))
-
-  if (verbose) message(paste(nrow(feF), "patients"))
+  
+  
+  
 
   return(list('fe'=feF, 'withdrawn'=withdrawn$FE.StudySubjectID))
 }
@@ -286,7 +346,7 @@ read.therapy<-function(ocs, tables, occams_ids=NULL, rulesFiles=NULL, ...) {
   } else {
     #tr <- read.table.data(tables[grep('^tr_', basename(tables))],  rulesFile=rulesFiles[1])
   }
-
+# TODO...this is missing patients or setting them as "no" when they are NA but have neoadj therapy info
   tr = tr %>% dplyr::mutate( TR.Chemotherapy = factor(ifelse((grepl('chemo', TR.CurativeTreatmentModality, ignore.case=T) |
                                                                 grepl('chemo', TR.PalliativeTreatmentModality, ignore.case=T)), 'yes','no'),levels=c('yes','no') ),
 

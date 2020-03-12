@@ -1,9 +1,6 @@
 # Select the filled in column, or the preferred one (i) if both are filled in
 mr<-function(a,b,i=1,empty=NA) {
-  #print(paste('a',a))
-  #print(paste('b',b))
   c = unique(na.omit(c(a[i],b[i])))
-  #print(paste('c',is_empty(c)))
   if (is_empty(c)) c = empty
   return(c[i])
 }
@@ -48,7 +45,7 @@ text.to.tstage<-function(fd) {
 bmicalc<-function(wt,ht) {
   if (is.na(wt) || is.na(ht) || wt <= 0 || ht <= 0)
     return(NA)
-  return (wt/((ht/100)^2))
+  return (signif(wt/((ht/100)^2),3))
 }
 
 # Trim whitespace

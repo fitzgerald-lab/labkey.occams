@@ -35,26 +35,22 @@ All of the labkey tables will be merged into a wide table with a single row per 
 Note that the default credential file path is ~/.labkey.cred so if you put it there, no need to provide the file path
 
 ```R
-
 library(openclinica.occams)
 
 ocs <- connect.to.labkey(file='labkey.creds') 
 occams <- download.wide.format(ocs)
 
-head(occams$patients)
-head(occams$tissues)
-
-
 ## OR if you have a list of OCCAMS identifiers
+occams <- download.wide.format(ocs, occams_ids)
 
-occams <- get.patients(ocs, occams_ids)
-occams$incorrect_ids
 head(occams$patients)
-head(occams$tissues)
-
-
-
 ```
 
+# Version 0.3 Changes
+
+- All of the followup/endpoint/recurrence tables are now being integrated.  A single row per-patient is created with the date of death (if know), date of recurrence, and last seen date is generated from the multiple tables.
+- All of the new treatment tables are now being merged. Column names are changed, TR.NeoAdj indicates neoadjuvant therapies, TR.Adj indicates adjuvant etc. However, if a patient has 'NA' entries in the adjuvant columns, that does *not* mean they were not treated adjuvantly.  We were not previously recording that separately, so there is no way to look at that information prior to the 2015 CRFs.
+- All columns that are created or inferred in the process of cleaning are indicated with a '.c' at the end of the column name: e.g. 'Weeks.Survival.c'
+- Some previously created columns no longer exist, including TR.Chemotherapy. Users need to determine this information from the treatment (TR.*) columns as necessary for their analysis.
 
 

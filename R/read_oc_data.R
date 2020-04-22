@@ -72,60 +72,62 @@ download.wide.format<-function(ocs, occams_ids=NULL, missing=NULL,versions='z1',
     tables[sort(grep(paste("^",x,sep=""), basename(tables)))]
   })
 
-  di <- read.demographics(ocs, ordered_tables$di, rulesFile=paste(path.package('openclinica.occams')[1], "editrules/di_editrules.txt", sep='/'),occams_ids=occams_ids,verbose=verbose) %>% dplyr::mutate(StudySubjectID = DI.StudySubjectID)
+  di <- read.demographics(ocs, ordered_tables$di, rulesFile=paste(path.package('openclinica.occams')[1], "editrules/di_editrules.txt", sep='/'),occams_ids=occams_ids,verbose=verbose) %>% dplyr::rename_at(vars(matches('Study')), list(~sub('^DI\\.','',.)))
 
   exes <- read.exposures(ocs, ordered_tables$ex, rulesFiles=NULL, occams_ids=occams_ids, verbose=verbose)
-  ex = exes$ex %>% dplyr::mutate(StudySubjectID = EX.StudySubjectID)
-  history = exes$history
+  ex <- exes$ex %>%  dplyr::rename_at(vars(matches('Study')), list(~sub('^EX\\.','',.)))
+  history <- exes$history
 
-  feep <- read.endpoints(ocs, c(ordered_tables$fe, ordered_tables$ep),
-                       rulesFiles=paste(path.package('openclinica.occams'), c('editrules/fe_editrules.txt', 'editrules/fe1_editrules.txt', 'editrules/ep_editrules.txt'), sep='/'), occams_ids=occams_ids, verbose=verbose)
-  fe = feep$fe %>% dplyr::mutate(StudySubjectID = FE.StudySubjectID)
-  withdrawn <- feep$withdrawn
+  feep <- read.followup(ocs, c(ordered_tables$fe,ordered_tables$ep,ordered_tables$fr), rulesFiles=paste(path.package('openclinica.occams'), c('editrules/fe_editrules.txt', 'editrules/fe1_editrules.txt', 'editrules/ep_editrules.txt'), sep='/'), occams_ids=occams_ids, verbose=verbose)
+  fe <- feep$fe %>%  dplyr::rename_at(vars(matches('Study')), list(~sub('^FE\\.','',.)))
+  
+  rd <- read.referral.diagnosis(ocs, ordered_tables$rd, rulesFile=paste(path.package('openclinica.occams'),'editrules/rd_editrules.txt',sep='/'), occams_ids=occams_ids, verbose=verbose) %>%  dplyr::rename_at(vars(matches('Study')), list(~sub('^RD\\.','',.)))
 
-  rd <- read.referral.diagnosis(ocs, ordered_tables$rd, rulesFile=paste(path.package('openclinica.occams'),'editrules/rd_editrules.txt',sep='/'), occams_ids=occams_ids, verbose=verbose) %>% dplyr::mutate(StudySubjectID = RD.StudySubjectID)
+  ps <-  read.prestage(ocs, ordered_tables$ps, rulesFiles=NULL, occams_ids=occams_ids, verbose=verbose)$ps %>%  
+    dplyr::rename_at(vars(matches('Study')), list(~sub('^PS\\.','',.)))
+  
+  tp <-  read.treatment.plan(ocs, ordered_tables$tp, rulesFiles=NULL, occams_ids=occams_ids, verbose=verbose)$tp %>% 
+    dplyr::rename_at(vars(matches('Study')), list(~sub('^TP\\.','',.)))
+  
+  tr <- read.therapy(ocs, ordered_tables$tr, rulesFiles=NULL, occams_ids=occams_ids, verbose=verbose) %>%  
+    dplyr::rename_at(vars(matches('Study')), list(~sub('^TR\\.','',.)))
 
-  # these two have duplicates as well
-  ps <-  read.prestage(ocs, ordered_tables$ps, rulesFiles=NULL, occams_ids=occams_ids, verbose=verbose)$ps %>% dplyr::mutate(StudySubjectID = PS.StudySubjectID)
-  tp <-  read.treatment.plan(ocs, ordered_tables$tp, rulesFiles=NULL, occams_ids=occams_ids, verbose=verbose)$tp %>% dplyr::mutate(StudySubjectID = TP.StudySubjectID)
+  st <- read.surgery(ocs, ordered_tables$st, rulesFile=NULL, occams_ids=occams_ids, verbose=verbose) %>% 
+    dplyr::rename_at(vars(matches('Study')), list(~sub('^ST\\.','',.)))
 
-  tr <- read.therapy(ocs, ordered_tables$tr, rulesFiles=NULL, occams_ids=occams_ids, verbose=verbose) %>% dplyr::mutate(StudySubjectID = TR.StudySubjectID)
-  st <- read.surgery(ocs, ordered_tables$st, rulesFile=NULL, occams_ids=occams_ids, verbose=verbose) %>% dplyr::mutate(StudySubjectID = ST.StudySubjectID)
-
-  rp <- read.pathology(ocs, ordered_tables$rp, occams_ids=occams_ids, rulesFile=paste(path.package('openclinica.occams'),'editrules/rp_editrules.txt',sep='/'), verbose=verbose) %>% dplyr::mutate(StudySubjectID = RP.StudySubjectID)
+  rp <- read.pathology(ocs, ordered_tables$rp, occams_ids=occams_ids, rulesFile=paste(path.package('openclinica.occams'),'editrules/rp_editrules.txt',sep='/'), verbose=verbose) %>% dplyr::rename_at(vars(matches('Study')), list(~sub('^RP\\.','',.)))
 
   if (verbose) message("Creating final patient table")
   # Merge final table
 
-  all = dplyr::full_join(di,ex,by='StudySubjectID') %>%
-    dplyr::full_join(rd,by='StudySubjectID') %>%
-    dplyr::full_join(tp,by='StudySubjectID') %>%
-    dplyr::full_join(ps,by='StudySubjectID') %>%
-    dplyr::full_join(tr,by='StudySubjectID') %>%
-    dplyr::full_join(st,by='StudySubjectID') %>%
-    dplyr::full_join(rp,by='StudySubjectID') %>%
-    dplyr::full_join(fe,by='StudySubjectID') %>%
-    dplyr::rename(ID=StudySubjectID, StudySite=DI.StudySite) %>% dplyr::group_by(ID) %>% dplyr::select(-contains('StudySubjectID'), -contains('CRF'), -contains('OpenClinica')) %>%
-    ungroup %>% recode.siewert %>% recode.TNM %>% group_by(ID) %>% select(ID,StudySite, everything(),-matches('\\.StudySite'))
-
-  # rm = which(rownames(all) %in% withdrawn)
-  # if (length(rm) > 0) all = all[-rm,]
+  all = dplyr::full_join(di,ex,by=c('StudySubjectID','StudySite')) %>%
+    dplyr::full_join(rd,by=c('StudySubjectID','StudySite')) %>%
+    dplyr::full_join(tp,by=c('StudySubjectID','StudySite')) %>%
+    dplyr::full_join(ps,by=c('StudySubjectID','StudySite')) %>%
+    dplyr::full_join(tr,by=c('StudySubjectID','StudySite')) %>%
+    dplyr::full_join(st,by=c('StudySubjectID','StudySite')) %>%
+    dplyr::full_join(rp,by=c('StudySubjectID','StudySite')) %>%
+    dplyr::full_join(fe,by=c('StudySubjectID','StudySite')) %>%
+    dplyr::rename(ID=StudySubjectID) %>% dplyr::group_by(ID) %>% 
+    dplyr::select(-contains('CRF'), -contains('OpenClinica')) %>%
+    ungroup %>% recode.siewert %>% 
+    #recode.TNM %>%
+    group_by(ID) %>% dplyr::select(ID, StudySite, everything())
 
   if (verbose) message(paste("Final patient total:", nrow(all)))
 
   all <- prestage.to.path(all)
-## TODO: CHECK THAT I"M LOOKINGF AT FR1 table
-  # Calculated columns
-  #all %>% select(matches('\\.c$'))
 
   # Dates after diagnosis that patients may have been seen
-  clinDates <- grep('(EP|FE|RP|ST|TR).+Date', colnames(all), value=T)
+  clinDates <- grep('(FE|RP|ST|TR).+Date', colnames(all), value=T)
 
   # In order
-  clinDates = all %>% select(ID,EP.DateOfPatientDeath, FE.DateOfUpdate, matches('ST.+Date'), matches('TR.NeoAdj.+Date'), matches('TR.Radio.+Date'), matches('TR.Endo.+Date')) %>% mutate_all(as.Date) %>% group_by(ID)
+  clinDates <- all %>% ungroup %>%
+    dplyr::select(ID,FE.DateOfPatientDeath, FE.LatestDateOfUpdate.c, FE.DateOriginalDiseaseReoccurred, matches('ST.+Date'), matches('TR.NeoAdj.+Date'), matches('TR.Radio.+Date'), matches('TR.Endo.+Date')) %>%
+    mutate_at(vars(-ID), list(~as.Date(format.Date(.,'%Y-%m-%d')))) 
 
   # can't work this one out in dplyr...
-  clinDates$FE.LastSeenDate <- as.Date(apply(clinDates[-1], 1, function(x) {
+  clinDates$FE.LastSeenDate.c <- as.Date(apply(clinDates[-1], 1, function(x) {
     y <- sort(x, decreasing=T)
     lastDate = y[1]
 
@@ -135,34 +137,31 @@ download.wide.format<-function(ocs, occams_ids=NULL, missing=NULL,versions='z1',
     return(lastDate)
   }))
 
-  all = dplyr::left_join(all, clinDates %>% dplyr::select(ID,FE.LastSeenDate), by='ID')
+  all <- dplyr::left_join(all, clinDates %>% dplyr::select(ID,FE.LastSeenDate.c), by='ID')
 
   # Dates after diagnosis that patients may have been seen
-  diagDates <- grep('RD.DateOfOGCDiagnosis|DI.DateOfInformedConsentForCAMSAndICGC', colnames(all), value=T)
-  all$RD.DiagnosisDate <- as.Date(apply(all[diagDates], 1, function(x) {
-    y <- sort(x)
+  diagDates <- grep('DI.DateOfDiagnosisOGC|RD.DateOfOGCDiagnosis|DI.DateOfInformedConsentForCAMSAndICGC', colnames(all), value=T)
+  all$RD.DiagnosisDate.c <- as.Date(apply(all[diagDates], 1, function(x) {
+    y <- sort(x, decreasing=F)
     firstDate <- y[1]
 
-    if (!is.na(y['RD.DateOfOGCDiagnosis']))
-      firstDate <- y['RD.DateOfOGCDiagnosis']
+    if (!is.na(y['DI.DateOfDiagnosisOGC']))
+      firstDate <- y['DI.DateOfDiagnosisOGC']
 
     return(firstDate)
   }))
 
-  all = all %>% dplyr::mutate(Weeks.Survival = round(as.numeric(difftime(FE.LastSeenDate, RD.DiagnosisDate, units='weeks'))), 3) %>% select(ID, StudySite, Weeks.Survival, RD.DiagnosisDate, FE.LastSeenDate, everything())
+  all <- all %>% group_by(ID) %>%
+    dplyr::mutate(Weeks.Survival.c = round(as.numeric(difftime(FE.LastSeenDate.c, RD.DiagnosisDate.c, units='weeks'))), 3) %>% 
+    dplyr::select(ID, StudySite, Weeks.Survival.c, RD.DiagnosisDate.c, FE.LastSeenDate.c, everything())
 
-  if ( length(which(is.na(all$EP.DateOfPatientDeath))) == nrow(all) ) {
-    warning("Date of death has been removed, survival time not calculated. ")
-    all$Weeks.Survival = NA
-  }
-
-  bad = with(all, which(Weeks.Survival < 1))
+  bad = with(all, which(Weeks.Survival.c < 1))
   message(paste(length(bad), "patients have a diagnosis date before their last seen (death/surgery/etc) date."))
-  all[bad, c('RD.DiagnosisDate', 'FE.LastSeenDate', 'Weeks.Survival')] = NA
+  all[bad, c('ID','RD.DiagnosisDate.c', 'FE.LastSeenDate.c', 'Weeks.Survival.c')] = NA
 
   tc <- read.tissue.collection(ocs, ordered_tables$tc, rulesFiles=NULL, occams_ids=occams_ids)
-
-  return(list('patients'=all, 'tissues'=tc, 'withdrawn'=withdrawn))
+history
+  return(list('patients'=all, 'family_history'=history, 'tissues'=tc))
 }
 
 

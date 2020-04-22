@@ -56,7 +56,7 @@ trim<-function(x) {
 # Recode and order siwert types
 recode.siewert<-function(df) {
   grp = group_vars(df)
-  df = df %>% ungroup %>% dplyr::mutate_at(vars(contains('SiewertClassification')), funs(recode_factor), '1'='Type I','2'='Type II','3'='Type III', .ordered=F, .missing=NA_character_ )
+  df = df %>% ungroup %>% dplyr::mutate_at(vars(contains('SiewertClassification')), funs(recode_factor), '1'='Type I','2'='Type II','3'='Type III', .ordered=F)
   if (length(grp) > 0) df = df %>% group_by(!!grp)
   return(df)
 }
@@ -70,6 +70,7 @@ recode.TNM<-function(df) {
 }
 
 
+# TODO FIX...my stages II and III appear incorrect
 # Determine TNM stage (I,II,II,IV) from the individual tumor, node, and metastasis stages
 tnmStage <- function(Ts,Ns,Ms) {
   if (is.na(Ts)) return(NA)

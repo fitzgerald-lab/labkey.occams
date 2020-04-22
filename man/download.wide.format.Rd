@@ -2,10 +2,19 @@
 % Please edit documentation in R/read_oc_data.R
 \name{download.wide.format}
 \alias{download.wide.format}
-\title{Download in wide format the Labkey data for all or a selected group of patients.}
+\title{Download in wide format the Labkey data for all or a selected group of patients.
+NOTE: Major changes from 2020 Apr 22 onwards. All of the therapy tables are merged.  There is no longer a TR.Chemotherapy column, to check if a patient has chemo
+look at TR.NeoAdj or TR.Adj columns.  
+All followup/endpoint/recurrence tables are now merged.  Only a single row per patient is provided with the most recent follow-up date, 
+the date of recurrence (if there is one) and the date of death (if known).}
 \usage{
-download.wide.format(ocs, occams_ids = NULL, missing = NULL,
-  versions = "z1", verbose = T)
+download.wide.format(
+  ocs,
+  occams_ids = NULL,
+  missing = NULL,
+  versions = "z1",
+  verbose = T
+)
 }
 \arguments{
 \item{ocs}{Labkey connection object from connect.to.labkey()}
@@ -20,6 +29,10 @@ download.wide.format(ocs, occams_ids = NULL, missing = NULL,
 }
 \description{
 Download in wide format the Labkey data for all or a selected group of patients.
+NOTE: Major changes from 2020 Apr 22 onwards. All of the therapy tables are merged.  There is no longer a TR.Chemotherapy column, to check if a patient has chemo
+look at TR.NeoAdj or TR.Adj columns.  
+All followup/endpoint/recurrence tables are now merged.  Only a single row per patient is provided with the most recent follow-up date, 
+the date of recurrence (if there is one) and the date of death (if known).
 }
 \author{
 skillcoyne

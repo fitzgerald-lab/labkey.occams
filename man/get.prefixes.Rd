@@ -4,12 +4,14 @@
 \alias{get.prefixes}
 \title{Get the table prefixes from the schema}
 \usage{
-get.prefixes(ocs, version = "z1")
+get.prefixes(ocs, version = NULL, type = c("clinical", "all"))
 }
 \arguments{
 \item{ocs}{Labkey connection}
 
 \item{version}{version for tables, default 'z1'}
+
+\item{type}{All or only CRF prefixes, default 'clinical'}
 }
 \description{
 Get the table prefixes from the schema

@@ -4,8 +4,13 @@
 \alias{dump.clinical.data}
 \title{Download all tables directly from Labkey for all or a subset of patients.}
 \usage{
-dump.clinical.data(ocs, occams_ids = NULL, prefixes = NULL,
-  version = "z1", outdir = "~/tmp")
+dump.clinical.data(
+  ocs,
+  occams_ids = NULL,
+  prefixes = NULL,
+  version = "z1",
+  outdir = "~/tmp"
+)
 }
 \arguments{
 \item{ocs}{labkey connection object from connect.to.labkey()}

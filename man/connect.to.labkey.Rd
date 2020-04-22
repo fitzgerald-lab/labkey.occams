@@ -12,3 +12,6 @@ connect.to.labkey(file = "~/.labkey.cred")
 \description{
 Create connection to Labkey
 }
+\author{
+
+}

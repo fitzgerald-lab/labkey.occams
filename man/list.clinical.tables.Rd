@@ -4,7 +4,7 @@
 \alias{list.clinical.tables}
 \title{List the clinical tables available in Labkey}
 \usage{
-list.clinical.tables(ocs, prefixes = NULL, versions = "z1")
+list.clinical.tables(ocs, prefixes = NULL)
 }
 \arguments{
 \item{ocs}{Labkey connection}

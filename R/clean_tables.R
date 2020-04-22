@@ -393,7 +393,7 @@ read.therapy<-function(ocs, tables, occams_ids=NULL, rulesFiles=NULL, ...) {
 
   if (inherits(ocs, "OCCAMSLabkey")) {
     if (verbose) message(paste("Reading",paste(tables, collapse=",")))
-    tr <- get.table.data(ocs,grep('^tr_', tables, value=T), rulesFile=rulesFiles[1], colFilter=make.id.filter(occams_ids, 'TR_StudySubjectID'))
+    tr <- get.table.data(ocs,grep('^tr_', tables, value=T), colFilter=make.id.filter(occams_ids, 'TR_StudySubjectID'))
 
     read_and_exclude<-function(tb, exclude=NULL) {
       exclude = paste(c('OpenClinica',exclude),collapse = '|')
@@ -443,7 +443,7 @@ read.therapy<-function(ocs, tables, occams_ids=NULL, rulesFiles=NULL, ...) {
   tr_other = match_cols(tr, tr_other) %>% dplyr::rename_at(vars(-matches('Study')), list(~paste0('TR.Other.',.)))
   if (verbose) message(paste(nrow(tr_other), "'other' therapies patients"))
 
-  tr = tr %>% dplyr::rename_at(vars(matches('Study')), list(~sub('^TR\\.','',.))) %>% 
+  tr <- tr %>% dplyr::rename_at(vars(matches('Study')), list(~sub('^TR\\.','',.))) %>% 
     dplyr::select(matches('Study|TreatmentIntent')) %>%
     dplyr::full_join(tr_neoadj, by=c('StudySubjectID','StudySite')) %>% 
     dplyr::full_join(tr_endo, by=c('StudySubjectID','StudySite')) %>% 

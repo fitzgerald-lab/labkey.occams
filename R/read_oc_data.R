@@ -35,20 +35,6 @@ dump.clinical.data<-function(ocs, occams_ids = NULL, prefixes=NULL, version='z1'
 }
 
 
-#' USE download.wide.format instead. This is the old method.
-#' @name download.all.tables
-#' @param ocs
-#' @param occams_ids Array of occams identifiers, this is optional. The default returns all patients, better to use get.patients(...) if you want this.
-#' @param missing Replace missing values with this string, default is NA
-#' @param verbose
-#'
-#' @author
-#' @export
-download.all.tables<-function(ocs, occams_ids=NULL, missing=NULL,versions='z1', verbose=T) {
-  warning('This method has been deprecated, please use download.wide.format(...) instead')
-  download.wide.format(ocs,occams_ids, missing, versions, verbose)
-}
-
 #' Download in wide format the Labkey data for all or a selected group of patients.
 #' NOTE: Major changes from 2020 Apr 22 onwards. All of the therapy tables are merged.  There is no longer a TR.Chemotherapy column, to check if a patient has chemo
 #' look at TR.NeoAdj or TR.Adj columns.  
@@ -156,7 +142,7 @@ download.wide.format<-function(ocs, occams_ids=NULL, missing=NULL,versions='z1',
   }))
 
   all <- all %>% group_by(ID) %>%
-    dplyr::mutate(Weeks.Survival.c = round(as.numeric(difftime(FE.LastSeenDate.c, RD.DiagnosisDate.c, units='weeks'))), 3) %>% 
+    dplyr::mutate(Weeks.Survival.c = round(as.numeric(difftime(FE.LastSeenDate.c, RD.DiagnosisDate.c, units='weeks')))) %>% 
     dplyr::select(ID, StudySite, Weeks.Survival.c, RD.DiagnosisDate.c, FE.LastSeenDate.c, everything())
 
   bad = with(all, which(Weeks.Survival.c < 1))

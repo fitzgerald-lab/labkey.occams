@@ -481,10 +481,10 @@ read.surgery<-function(ocs, table, occams_ids=NULL, rulesFile=NULL, ...) {
   if (length(dups) > 0) st <- st[-dups, ]
 
   # A patient may be recorded as getting surgery (ST.MainSurgery) but ultimately not receive surgery. A patient may also undergo surgery but have no resection pathology as the surgeon will have not been able to complete it.
-  st = st %>% group_by(ST.StudySubjectID) %>% 
+  st <- st %>% group_by(ST.StudySubjectID) %>% 
     dplyr::mutate(
     ST.SurgeryPerformed.c = factor(ifelse(ST.MainSurgery == 'yes' & (is.na(ST.ReasonIfNoSurgery) | is.na(ST.OtherReasonForNoSurgery)), 'yes', 'no'), levels=c('yes','no')),
-    ST.PathologyReportGenerated.c = factor(ifelse(ST.SurgeryPerformed.c == 'yes' & !grepl("Open (and|&) Shut", ST.Procedure, ignore.case=T),'yes', 'no'), levels=c('yes','no'))) %>% 
+    ST.PathologyReportGenerated.c = factor(ifelse(ST.SurgeryPerformed.c == 'yes' & !grepl("Open (and|&) Shut", ST.Procedure, ignore.case=T),'yes', 'no'), levels=c('yes','no'))) %>% ungroup %>% 
     dplyr::mutate_at(vars(ST.ASAGrade, matches('Percentage')), list(~as.numeric(.))) %>%
     dplyr::select(-matches('OpenClinica'))
 

@@ -50,6 +50,10 @@ download.all.tables<-function(ocs, occams_ids=NULL, missing=NULL,versions='z1', 
 }
 
 #' Download in wide format the Labkey data for all or a selected group of patients.
+#' NOTE: Major changes from 2020 Apr 22 onwards. All of the therapy tables are merged.  There is no longer a TR.Chemotherapy column, to check if a patient has chemo
+#' look at TR.NeoAdj or TR.Adj columns.  
+#' All followup/endpoint/recurrence tables are now merged.  Only a single row per patient is provided with the most recent follow-up date, 
+#' the date of recurrence (if there is one) and the date of death (if known).
 #' @name download.wide.format
 #' @param ocs Labkey connection object from connect.to.labkey()
 #' @param occams_ids Array of occams identifiers, this is optional. The default returns all patients, better to use get.patients(...) if you want this.
@@ -83,10 +87,10 @@ download.wide.format<-function(ocs, occams_ids=NULL, missing=NULL,versions='z1',
   
   rd <- read.referral.diagnosis(ocs, ordered_tables$rd, rulesFile=paste(path.package('openclinica.occams'),'editrules/rd_editrules.txt',sep='/'), occams_ids=occams_ids, verbose=verbose) %>%  dplyr::rename_at(vars(matches('Study')), list(~sub('^RD\\.','',.)))
 
-  ps <-  read.prestage(ocs, ordered_tables$ps, rulesFiles=NULL, occams_ids=occams_ids, verbose=verbose)$ps %>%  
+  ps <- read.prestage(ocs, ordered_tables$ps, rulesFiles=NULL, occams_ids=occams_ids, verbose=verbose)$ps %>%  
     dplyr::rename_at(vars(matches('Study')), list(~sub('^PS\\.','',.)))
   
-  tp <-  read.treatment.plan(ocs, ordered_tables$tp, rulesFiles=NULL, occams_ids=occams_ids, verbose=verbose)$tp %>% 
+  tp <- read.treatment.plan(ocs, ordered_tables$tp, rulesFiles=NULL, occams_ids=occams_ids, verbose=verbose)$tp %>% 
     dplyr::rename_at(vars(matches('Study')), list(~sub('^TP\\.','',.)))
   
   tr <- read.therapy(ocs, ordered_tables$tr, rulesFiles=NULL, occams_ids=occams_ids, verbose=verbose) %>%  
@@ -160,7 +164,6 @@ download.wide.format<-function(ocs, occams_ids=NULL, missing=NULL,versions='z1',
   all[bad, c('ID','RD.DiagnosisDate.c', 'FE.LastSeenDate.c', 'Weeks.Survival.c')] = NA
 
   tc <- read.tissue.collection(ocs, ordered_tables$tc, rulesFiles=NULL, occams_ids=occams_ids)
-history
   return(list('patients'=all, 'family_history'=history, 'tissues'=tc))
 }
 

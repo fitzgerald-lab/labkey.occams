@@ -150,7 +150,7 @@ get.table.data<-function(ocs, table, columns=NULL, uniqueID='StudySubjectID', ru
   if (!is.null(uniqueID))
     rows = suppressWarnings(rows %>% dplyr::group_by_at(vars(contains(uniqueID))))
 
-  rows <- rows %>% select(-contains('CRF'))
+  rows <- rows %>% dplyr::select(-contains('CRF'))
 
   return(rows)
 }
@@ -186,23 +186,23 @@ editrules<-function(file, df, verbose=T) {
 
   if(verbose) message(paste("Applying rules found in", file))
 
-  groups = group_vars(df)
+  groups = dplyr::group_vars(df)
 
   # Numeric
-  cols = rules %>% filter(Def == 'numeric') %>% select(Column) %>% pull
-  if (length(cols) > 0) df = df %>% ungroup %>% mutate_at(cols, funs(as.numeric))
+  cols = rules %>% dplyr::filter(Def == 'numeric') %>% dplyr::select(Column) %>% pull
+  if (length(cols) > 0) df = df %>% ungroup %>% dplyr::mutate_at(cols, funs(as.numeric))
 
   # Date
-  cols = rules %>% filter(Def == 'date') %>% select(Column) %>% pull
-  if (length(cols) > 0) df = df %>% ungroup %>% mutate_at(cols, funs(as.Date))
+  cols = rules %>% dplyr::filter(Def == 'date') %>% dplyr::select(Column) %>% pull
+  if (length(cols) > 0) df = df %>% ungroup %>% dplyr::mutate_at(cols, funs(as.Date))
 
   # Character
-  cols = rules %>% filter(Def == 'character') %>% select(Column) %>% pull
-  if (length(cols) > 0) df = df %>% ungroup %>% mutate_at(cols, funs(as.character))
+  cols = rules %>% dplyr::filter(Def == 'character') %>% dplyr::select(Column) %>% pull
+  if (length(cols) > 0) df = df %>% ungroup %>% dplyr::mutate_at(cols, funs(as.character))
 
   # Factor TODO -- not sure how to make specfic rules work with dplyr
-  cols = rules %>% filter(Def == 'factor') %>% select(Column) %>% pull
-  if (length(cols) > 0) df = df %>% mutate_at(cols, funs(as.factor))
+  cols = rules %>% dplyr::filter(Def == 'factor') %>% dplyr::select(Column) %>% pull
+  if (length(cols) > 0) df = df %>% dplyr::mutate_at(cols, funs(as.factor))
 
   failed <- apply(rules,1, function(x) {
     if (length(intersect(x[['Column']], colnames(df))) <= 0) {
@@ -220,7 +220,7 @@ editrules<-function(file, df, verbose=T) {
     }
   }
 
-  df = df %>% group_by_at(groups)
+  df = df %>% dplyr::group_by_at(groups)
 
   return(list("f" = lapply(failed, length), "df"= df))
 }

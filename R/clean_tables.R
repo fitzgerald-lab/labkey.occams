@@ -636,7 +636,7 @@ read.tissue.collection<-function(ocs, tables, rulesFiles=NULL, occams_ids=NULL, 
   )
 
   tc1 = left_join(tc1, tc, by=c('TC1.StudySubjectID'='TC.StudySubjectID')) %>% dplyr::rename('StudySubjectID'='TC1.StudySubjectID') %>%
-    select(StudySubjectID, starts_with('TC.'), starts_with('TC1.')) %>% group_by(StudySubjectID)
+    dplyr::select(StudySubjectID, starts_with('TC.'), starts_with('TC1.')) %>% group_by(StudySubjectID)
 
   if (verbose) message(paste(nrow(tc1), "tissues"))
 

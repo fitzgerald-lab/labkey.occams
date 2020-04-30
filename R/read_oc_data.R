@@ -89,14 +89,14 @@ download.wide.format<-function(ocs, occams_ids=NULL, missing=NULL,versions='z1',
 
   if (verbose) message("Creating final patient table")
   # Merge final table
-  all <- dplyr::full_join(di,ex,by=c('StudySubjectID','StudySite')) %>%
-    dplyr::full_join(rd,by=c('StudySubjectID','StudySite')) %>%
-    dplyr::full_join(tp,by=c('StudySubjectID','StudySite')) %>%
-    dplyr::full_join(ps,by=c('StudySubjectID','StudySite')) %>%
-    dplyr::full_join(tr,by=c('StudySubjectID','StudySite')) %>%
-    dplyr::full_join(st,by=c('StudySubjectID','StudySite')) %>%
-    dplyr::full_join(rp,by=c('StudySubjectID','StudySite')) %>%
-    dplyr::full_join(fe,by=c('StudySubjectID','StudySite')) %>%
+  all <- dplyr::left_join(di,ex,by=c('StudySubjectID','StudySite')) %>%
+    dplyr::left_join(rd,by=c('StudySubjectID','StudySite')) %>%
+    dplyr::left_join(tp,by=c('StudySubjectID','StudySite')) %>%
+    dplyr::left_join(ps,by=c('StudySubjectID','StudySite')) %>%
+    dplyr::left_join(tr,by=c('StudySubjectID','StudySite')) %>%
+    dplyr::left_join(st,by=c('StudySubjectID','StudySite')) %>%
+    dplyr::left_join(rp,by=c('StudySubjectID','StudySite')) %>%
+    dplyr::left_join(fe,by=c('StudySubjectID','StudySite')) %>%
     dplyr::rename(ID=StudySubjectID) %>% dplyr::group_by(ID) %>% 
     dplyr::select(-contains('CRF'), -contains('OpenClinica')) %>%
     ungroup %>% recode.siewert %>% 
@@ -124,9 +124,11 @@ download.wide.format<-function(ocs, occams_ids=NULL, missing=NULL,versions='z1',
       lastDate = y['FE.DateOfPatientDeath']
 
     return(lastDate)
-  }))
+  })) 
 
-  all <- dplyr::left_join(all, clinDates %>% dplyr::select(ID,FE.LastSeenDate.c), by='ID')
+  clinDates <- clinDates %>% dplyr::select(ID,FE.LastSeenDate.c) 
+  
+  all <- dplyr::inner_join(all, clinDates,  by='ID')
 
   # Dates after diagnosis that patients may have been seen
   diagDates <- grep('DI.DateOfDiagnosisOGC|RD.DateOfOGCDiagnosis|DI.DateOfInformedConsentForCAMSAndICGC', colnames(all), value=T)

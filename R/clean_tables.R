@@ -461,21 +461,26 @@ read.therapy<-function(ocs, tables, occams_ids=NULL, rulesFiles=NULL, ...) {
   }
 
   # neoadj
-  tr_neoadj = match_cols(tr,tr_neoadj) %>% dplyr::rename_at(vars(-matches('Study')), list(~paste0('TR.NeoAdj.',.))) 
+  tr_neoadj = match_cols(filter(tr, TR.TreatmentIntent == 'Curative'),tr_neoadj) %>% dplyr::rename_at(vars(-matches('Study')), list(~paste0('TR.NeoAdj.',.))) 
   if (verbose) message(paste(nrow(tr_neoadj), 'neoadjuvant patients'))
-  # endo
-  tr_endo = match_cols(tr, tr_endo) %>% dplyr::rename_at(vars(-matches('Study')), list(~paste0('TR.Endo.',.)))
-  if (verbose) message(paste(nrow(tr_endo), 'endoscopic patients'))
-  # radio
-  tr_rd = match_cols(tr, tr_rd) %>% dplyr::rename_at(vars(-matches('Study')), list(~paste0('TR.RT.',.)))
-  if (verbose) message(paste(nrow(tr_rd), 'RFA patients'))
+  
   # adjuvant -- the original table provided no way to enter both NeoAdj and Adj chemo so can't merge them
   tr_adj = tr_adj %>% dplyr::rename_at(vars(matches('Study')), list(~sub('^TR.+\\.','',.))) %>% 
     dplyr::rename_at(vars(-matches('Study')), list(~sub('^TR.+\\.', 'TR.Adj.',.)))
   if (verbose) message(paste(nrow(tr_adj), 'adjuvant patients'))
+  
+  # endo
+  tr_endo = match_cols(tr, tr_endo) %>% dplyr::rename_at(vars(-matches('Study')), list(~paste0('TR.Endo.',.)))
+  if (verbose) message(paste(nrow(tr_endo), 'endoscopic patients'))
+
+  # radio
+  tr_rd = match_cols(tr, tr_rd) %>% dplyr::rename_at(vars(-matches('Study')), list(~paste0('TR.RT.',.)))
+  if (verbose) message(paste(nrow(tr_rd), 'RFA patients'))
+  
   # palliative (all therapies)
   tr_pc = match_cols(filter(tr, TR.TreatmentIntent == 'Palliative'), tr_pc) %>% dplyr::rename_at(vars(-matches('Study')), list(~paste0('TR.PalChemo.',.)))
   if (verbose) message(paste(nrow(tr_pc), 'palliative chemo patients'))
+  
   # Other therapies
   tr_other = match_cols(tr, tr_other) %>% dplyr::rename_at(vars(-matches('Study')), list(~paste0('TR.Other.',.)))
   if (verbose) message(paste(nrow(tr_other), "'other' therapies patients"))
@@ -521,6 +526,8 @@ read.therapy<-function(ocs, tables, occams_ids=NULL, rulesFiles=NULL, ...) {
     tr <- tr %>% dplyr::full_join(tr_other, by=c('StudySubjectID','StudySite')) 
   }
 
+  tr %>% distinct()
+  
   if (verbose) message(paste(nrow(tr), "patients in treatment tables"))
   
   return(tr)

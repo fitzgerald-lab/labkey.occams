@@ -4,13 +4,14 @@
 match_cols<-function(mainTB, newTB) {
   mainTB = mainTB %>% ungroup %>% rename_all(list(~sub('^.+\\.', '',.))) 
   mainStudyCols = grep('Study', colnames(mainTB))
+
   newTB = newTB %>% ungroup %>% rename_all(list(~sub('^.+\\.', '',.))) 
   newStudyCols = grep('Study', colnames(newTB))
   
   x = colnames(mainTB %>% dplyr::select(-contains('Study')))
   y = colnames(newTB %>% dplyr::select(-contains('Study')))
   
-  merged = mainTB %>% dplyr::select(mainStudyCols,intersect(x,y)) %>% 
+  merged <- mainTB %>% dplyr::select(mainStudyCols,intersect(x,y)) %>% 
     dplyr::bind_rows( newTB %>% dplyr::select(newStudyCols, y) ) %>% 
     dplyr::mutate_at(vars(-matches('Study')), list(~str_to_upper(.)))
   
@@ -152,6 +153,9 @@ read.endpoint<-function(ocs, tables, occams_ids=NULL, rulesFile=NULL, ...) {
   table = get.tables.by.crf(ocs, c('endpoint'))
   filter = make.id.filter(occams_ids, 'EP_StudySubjectID')
   
+  if (!is.null(rulesFile))
+    rulesFile = grep('ep_', rulesFile, value=T)
+  
   if (inherits(ocs, "OCCAMSLabkey")) {
     #stop("Create connection to OCCAMS Labkey first")
     if (verbose) message(paste("Reading",paste(table, collapse=",")))
@@ -161,12 +165,13 @@ read.endpoint<-function(ocs, tables, occams_ids=NULL, rulesFile=NULL, ...) {
     ep <- read.table.data(table,  rulesFile=rulesFile)
   }
   
-  ep <- ep %>% ungroup %>% dplyr::mutate_at(vars(EP.EndPoint,EP.ReasonForPatientDeath), list(~factor(.))) %>%
-    dplyr::group_by(EP.StudySubjectID) %>% 
-    #dplyr::mutate(Patient.Died = ifelse(EP.EndPoint == 'Patient died', 'yes','no') ) %>%
-    #ungroup %>% dplyr::mutate(Patient.Died = factor(Patient.Died)) %>% 
-    dplyr::select(-contains('OpenClinica'))
+  ep <- dplyr::select(ep, -contains('OpenClinica'))
   
+  if (nrow(ep) > 0) {
+    ep <- ep %>% ungroup %>% dplyr::mutate_at(vars(EP.EndPoint,EP.ReasonForPatientDeath), list(~factor(.))) %>%
+      dplyr::group_by(EP.StudySubjectID) 
+  }
+
   if (verbose) message(paste0(nrow(ep), ' patients in ', table))
 
   return(ep)
@@ -194,9 +199,14 @@ read.followup<-function(ocs, tables, occams_ids=NULL, rulesFiles=NULL, ...) {
     if (verbose) message(paste("Reading tables:\n\t",paste(tables, collapse="\n\t ")))
 
     # Not sure which direction this is going, but FE or EP must be superseded by the other at some point, except new values are continuing to appear in both so they'll need some merging
-    ep <- read.endpoint(ocs,grep('ep',tables,value=T),occams_ids, rulesFile=grep('ep_', rulesFiles, value=T)) 
-    fe <- get.table.data(ocs,grep('fe_',tables,value=T),  rulesFile=grep('fe_', rulesFiles,value=T), colFilter=make.id.filter(occams_ids, 'FE_StudySubjectID'))
-    fe1 <- get.table.data(ocs,grep('fe1_',tables,value=T),  rulesFile=grep('fe1_', rulesFiles,value=T), colFilter=make.id.filter(occams_ids, 'FE1_StudySubjectID'))
+    ep <- read.endpoint(ocs,grep('ep',tables,value=T),occams_ids, rulesFile=rulesFiles) 
+    if (!is.null(rulesFiles)) {
+      fe <- get.table.data(ocs,grep('fe_',tables,value=T),  rulesFile=grep('fe_', rulesFiles,value=T), colFilter=make.id.filter(occams_ids, 'FE_StudySubjectID'))
+      fe1 <- get.table.data(ocs,grep('fe1_',tables,value=T),  rulesFile=grep('fe1_', rulesFiles,value=T), colFilter=make.id.filter(occams_ids, 'FE1_StudySubjectID'))
+    } else {
+      fe <- get.table.data(ocs,grep('fe_',tables,value=T),  rulesFile=NULL, colFilter=make.id.filter(occams_ids, 'FE_StudySubjectID'))
+      fe1 <- get.table.data(ocs,grep('fe1_',tables,value=T),  rulesFile=NULL, colFilter=make.id.filter(occams_ids, 'FE1_StudySubjectID'))
+    }
     # followup and reoccurance - these are new tables
     #filterR = make.id.filter(occams_ids, 'FR_StudySubjectID')
     # This table currently only includes OpenClinica(Start|Interview)Date so there's no point in using it
@@ -211,60 +221,87 @@ read.followup<-function(ocs, tables, occams_ids=NULL, rulesFiles=NULL, ...) {
     fr1 <- read.table.data(ocs,grep('fr1_',tables,value=T), rulesFile=NULL)
   }
   
-  feep <- full_join(fe,ep,by=c('FE.StudySubjectID'='EP.StudySubjectID')) %>%
-    dplyr::group_by(FE.StudySubjectID) %>%
+  if (nrow(ep) <= 0) {
+    for(n in colnames(ep)) fe <- add_column(fe, !!n := NA_character_)
+    feep <- fe %>% dplyr::select(-EP.StudySubjectID)
+  } else if (nrow(fe) <= 0) {
+    for(n in colnames(fe)) ep <- add_column(ep, !!n := NA_character_)
+    feep <- ep %>% dplyr::rename(EP.StudySubjectID = FE.StudySubjectID) 
+  } else {
+    feep <- full_join(fe,ep,by=c('FE.StudySubjectID'='EP.StudySubjectID'))  
+  }
+
+  feep <- feep %>% dplyr::group_by(FE.StudySubjectID) %>%
     dplyr::mutate(
-      FE.StudySite = mr(FE.StudySite, EP.StudySite),
+      FE.StudySite = na.omit(FE.StudySite, EP.StudySite)[1],
       FE.EndPoint = dplyr::case_when(
         (FE.EndPoint == 'Patient died' | EP.EndPoint == 'Patient died') ~ 'Patient died', 
         (FE.EndPoint == 'Follow-up ended' | EP.EndPoint == 'Follow-up ended') ~ 'Follow-up ended', 
         # this is because there was not a good option for "5-years follow up ended.  It did not mean the patient was withdrawing from the study
         (FE.EndPoint == 'Patient withdrawal' | EP.EndPoint == 'Patient withdrawal') ~ 'Follow-up ended', 
-        TRUE ~ as.character(mr(FE.EndPoint, EP.EndPoint)) ),
-      FE.DateOfPatientDeath = mr(FE.DateOfPatientDeath,EP.DateOfPatientDeath),
-      FE.ReasonForPatientDeath = mr(FE.ReasonForPatientDeath, EP.ReasonForPatientDeath),
-      FE.ReasonForPatientDeathOther = mr(FE.ReasonForPatientDeathOther, EP.ReasonForPatientDeathOther) ) %>% 
+        TRUE ~ as.character(na.omit(FE.EndPoint, EP.EndPoint))[1] ),
+      FE.DateOfPatientDeath = na.omit(FE.DateOfPatientDeath,EP.DateOfPatientDeath)[1],
+      FE.ReasonForPatientDeath = na.omit(FE.ReasonForPatientDeath, EP.ReasonForPatientDeath)[1],
+      FE.ReasonForPatientDeathOther = na.omit(FE.ReasonForPatientDeathOther, EP.ReasonForPatientDeathOther)[1] ) %>% 
     dplyr::select(starts_with('FE'), -contains('OpenClinica'), -matches('FE.ageAtDeath'))
   # get date of recurrence in a single row
-  dis.r<-function(hasR, dateR, dateU, i) {
+  dis.r<-function(ID, hasR, dateR, dateU, i) {
     n = which(hasR == 'Yes')[1]
-    
-    if (length(n) <= 0) {
+    if (length(n) <= 0 | is.na(n)) {
       return( c('No',NA)[i] )
     } else if (i == 1) {
       return(hasR[n])
     } else {
       date = dateR[n]
-      if (is.na(date)) date = dateU[n]
-      return( as.Date(date) )
+      if (is.na(date)) {
+        date = dateU[n]
+      }
+      return(date)
     }
-    return(NA)            
+    return(NA_character_)            
   }
   
-  fe1 <- fe1 %>% dplyr::group_by(FE1.StudySubjectID) %>%
+  fe1 <- fe1 %>% dplyr::group_by(FE1.StudySubjectID, FE1.StudySite) %>%
     dplyr::arrange(desc(FE1.DateOfUpdate)) %>% 
-    #filter(!grepl('death', FE1.ReasonForFollowUp)) %>%
     dplyr::summarise(FE.LatestDateOfUpdate.c = FE1.DateOfUpdate[1],
                      FE.LatestReasonForFollowUp.c = FE1.ReasonForFollowUp[1],
-                     FE.HasOriginalDiseaseReoccurred = dis.r(FE1.HasOriginalDiseaseReoccurred, FE1.DateOriginalDiseaseReoccurred, FE1.DateOfUpdate,1),
-                     FE.DateOriginalDiseaseReoccurred = dis.r(FE1.HasOriginalDiseaseReoccurred, FE1.DateOriginalDiseaseReoccurred, FE1.DateOfUpdate,2) ) 
+                     FE.HasOriginalDiseaseReoccurred = dis.r(FE1.StudySubjectID,FE1.HasOriginalDiseaseReoccurred, FE1.DateOriginalDiseaseReoccurred, FE1.DateOfUpdate,1),
+                     FE.DateOriginalDiseaseReoccurred = as.Date(dis.r(FE1.StudySubjectID,FE1.HasOriginalDiseaseReoccurred, FE1.DateOriginalDiseaseReoccurred, FE1.DateOfUpdate,2) )
+                     ) 
   
   feep <- left_join(feep, fe1, by=c('FE.StudySubjectID'='FE1.StudySubjectID'))
   
-  frr <- left_join(fr0,fr1, by=c('FR0.StudySubjectID' = 'FR1.StudySubjectID', 'FR0.StudySite' = 'FR1.StudySite')) %>% 
-    dplyr::rename_at(vars(matches('^FE')), list(~sub('^FE', 'FR', .))) %>%
+  if (nrow(fr0) <= 0 & nrow(fr1) <= 0) {
+    frr <- as_tibble(merge(fr0,fr1)) %>% dplyr::select(-FR1.StudySubjectID, -FR1.StudySite)
+  } else if (nrow(fr0) <= 0) {
+    for(n in colnames(fr0)) fr1 <- add_column(fr1, !!n := NA_character_)
+    frr <- fr1 %>% dplyr::rename(FR0.StudySubjectID = FR1.StudySubjectID, FR0.StudySite = FR1.StudySite) 
+  } else if (nrow(fr1) <= 0) {
+    for(n in colnames(fr1)) fr0 <- add_column(fr0, !!n := NA_character_)
+    frr <- fr0 %>% dplyr::select(-FR1.StudySubjectID, -FR1.StudySite) 
+  } else {
+    frr <- left_join(fr0,fr1, by=c('FR0.StudySubjectID' = 'FR1.StudySubjectID', 'FR0.StudySite' = 'FR1.StudySite'))
+  }
+  
+  frr <- frr %>% dplyr::rename_at(vars(matches('^FE')), list(~sub('^FE', 'FR', .))) %>%
     dplyr::rename_at(vars(matches('Study(Subject|Site)')), list(~sub('FR[0-1]', 'FR',.))) %>%
     dplyr::group_by(FR.StudySubjectID, FR.StudySite) %>%
     dplyr::arrange(desc(FR.DateOfFollowUpEvent)) %>% 
     #filter(!grepl('death', FE1.ReasonForFollowUp)) %>%
     dplyr::summarise(FR.LatestDateOfUpdate.c = FR.DateOfFollowUpEvent[1],
                      FR.LatestReasonForFollowUp.c = FR.ReasonForFollowUp[1],
-                     FR.HasOriginalDiseaseReoccurred = dis.r(FR.HasOriginalDiseaseRecurred, Fr.DateOriginalDiseaseRecurred, FR.DateOfFollowUpEvent,1),
-                     FR.DateOriginalDiseaseReoccurred = dis.r(FR.HasOriginalDiseaseRecurred, FR.DateOriginalDiseaseRecurred, FR.DateOfFollowUpEvent,2))
+                     FR.HasOriginalDiseaseReoccurred = dis.r(FR.StudySubjectID,FR.HasOriginalDiseaseRecurred, FR.DateOriginalDiseaseRecurred, FR.DateOfFollowUpEvent,1),
+                     FR.DateOriginalDiseaseReoccurred = as.Date(dis.r(FR.StudySubjectID,FR.HasOriginalDiseaseRecurred, FR.DateOriginalDiseaseRecurred, FR.DateOfFollowUpEvent,2)))
   
   # Merge and clean to get a single date of recurrence/endpoint/etc
-  fer <- full_join(feep,frr,by=c('FE.StudySubjectID' = 'FR.StudySubjectID', 'FE.StudySite' = 'FR.StudySite')) %>%   
-    dplyr::mutate(FE.LatestReasonForFollowUp.c = sort(unique(na.omit(FE.LatestReasonForFollowUp.c), na.omit(FR.LatestReasonForFollowUp.c)))[1],
+  if (nrow(frr) <= 0) {
+    for(n in colnames(frr)) feep <- add_column(feep, !!n := NA_character_)
+    fer <- feep %>% dplyr::select(-FR.StudySubjectID, -FR.StudySite)
+  } else {
+    fer <- full_join(feep,frr,by=c('FE.StudySubjectID' = 'FR.StudySubjectID', 'FE.StudySite' = 'FR.StudySite')) 
+  }
+  
+  fer <- fer %>% dplyr::mutate(FE.LatestReasonForFollowUp.c = sort(unique(na.omit(FE.LatestReasonForFollowUp.c), na.omit(FR.LatestReasonForFollowUp.c)))[1],
                   FE.DateOriginalDiseaseReoccurred = sort(unique(na.omit(c(FR.DateOriginalDiseaseReoccurred, FE.DateOriginalDiseaseReoccurred))))[1],
                   FE.LatestDateOfUpdate.c = sort(unique(na.omit(c(FR.LatestDateOfUpdate.c, FE.LatestDateOfUpdate.c))))[1],
                   FE.HasOriginalDiseaseReoccurred = unique(na.omit(FE.HasOriginalDiseaseReoccurred, FR.HasOriginalDiseaseReoccurred))[1]) %>%
@@ -334,6 +371,7 @@ read.prestage<-function(ocs, tables, occams_ids=NULL, rulesFiles=NULL, ...) {
   ps <- ps %>% dplyr::group_by(PS.StudySubjectID) %>%
     # dplyr::mutate(PS.TNMStage.Final.c = tnmStage(PS.TStage.PrimaryTumour.FinalPretreatmentStaging, PS.NStage.PrimaryTumour.FinalPretreatmentStaging.TNM7, PS.MStage.PrimaryTumour.FinalPretreatmentStaging)) %>% 
     ungroup %>% mutate_at(vars(contains('NumberOf')), list(~as.integer(.)))
+  
   if (verbose) message(paste0(nrow(ps), ' patients from ',grep('^ps_',tables, value=T)))
   
   return(list('ps' = ps, 'duplicates' = duplicatePts))
@@ -412,8 +450,7 @@ read.therapy<-function(ocs, tables, occams_ids=NULL, rulesFiles=NULL, ...) {
     tr_endo <- get.table.data(ocs,grep('^tre0_', tables, value=T), colFilter=make.id.filter(occams_ids, 'TRE0_StudySubjectID')) %>% read_and_exclude() %>%
       dplyr::rename_all(list(~sub('TRE0','TRE',.)))
     # other
-    tr_other <- get.table.data(ocs,grep('^tro', tables, value=T), colFilter=make.id.filter(occams_ids, 'TR0_StudySubjectID')) %>% read_and_exclude()
-   
+    tr_other <- get.table.data(ocs,grep('^tro', tables, value=T), colFilter=make.id.filter(occams_ids, 'TRO_StudySubjectID')) %>% read_and_exclude()
   } else {
     tr <- read.table.data(grep('^tr_', tables, value=T), rulesFile=rulesFiles[1]) %>% read_and_exclude()
     tr_adj <- read.table.data(grep('^trac_', tables, value=T)) %>% read_and_exclude()
@@ -444,13 +481,45 @@ read.therapy<-function(ocs, tables, occams_ids=NULL, rulesFiles=NULL, ...) {
   if (verbose) message(paste(nrow(tr_other), "'other' therapies patients"))
 
   tr <- tr %>% dplyr::rename_at(vars(matches('Study')), list(~sub('^TR\\.','',.))) %>% 
-    dplyr::select(matches('Study|TreatmentIntent')) %>%
-    dplyr::full_join(tr_neoadj, by=c('StudySubjectID','StudySite')) %>% 
-    dplyr::full_join(tr_endo, by=c('StudySubjectID','StudySite')) %>% 
-    dplyr::full_join(tr_rd, by=c('StudySubjectID','StudySite')) %>% 
-    dplyr::full_join(tr_adj, by=c('StudySubjectID','StudySite')) %>% 
-    dplyr::full_join(tr_pc, by=c('StudySubjectID','StudySite')) %>% 
-    dplyr::full_join(tr_other, by=c('StudySubjectID','StudySite')) 
+    dplyr::select(matches('Study|TreatmentIntent'))
+
+  if (nrow(tr_neoadj) <= 0) {
+    for (n in colnames(tr_neoadj)) tr <- add_column(tr, !!n := NA_character_)
+    tr <- tr %>% dplyr::select(-TRNC.StudySubjectID, -TRNC.StudySite)
+  } else {
+    tr <- tr %>% dplyr::full_join(tr_neoadj, by=c('StudySubjectID','StudySite')) 
+  }
+
+  if (nrow(tr_endo) <= 0) {
+    for (n in colnames(tr_endo)[-c(1:2)] ) tr <- add_column(tr, !!n := NA_character_)
+    tr <- tr %>% dplyr::select(-TRNC.StudySubjectID, -TRNC.StudySite)
+  } else {
+    tr <- tr %>% dplyr::full_join(tr_endo, by=c('StudySubjectID','StudySite')) 
+  }
+  
+  if (nrow(tr_rd) <= 0) {
+    for (n in colnames(tr_rd)[-c(1:2)] ) tr <- add_column(tr, !!n := NA_character_)
+  } else {
+    tr <- tr %>% dplyr::full_join(tr_rd, by=c('StudySubjectID','StudySite')) 
+  }  
+    
+  if (nrow(tr_adj) <= 0) {
+    for (n in colnames(tr_adj)[-c(1:2)] ) tr <- add_column(tr, !!n := NA_character_)
+  } else {
+    tr <- tr %>% dplyr::full_join(tr_adj, by=c('StudySubjectID','StudySite'))
+  }
+  
+  if (nrow(tr_pc) <= 0) {
+    for (n in colnames(tr_pc)[-c(1:2)] ) tr <- add_column(tr, !!n := NA_character_)
+  } else {
+    tr <- tr %>% dplyr::full_join(tr_pc, by=c('StudySubjectID','StudySite')) 
+  }
+
+  if (nrow(tr_other) <= 0) {
+    for (n in colnames(tr_other)[-c(1:2)] ) tr <- add_column(tr, !!n := NA_character_)
+  } else {
+    tr <- tr %>% dplyr::full_join(tr_other, by=c('StudySubjectID','StudySite')) 
+  }
 
   if (verbose) message(paste(nrow(tr), "patients in treatment tables"))
   
@@ -515,8 +584,6 @@ read.pathology<-function(ocs, table, occams_ids=NULL, rulesFile=NULL, ...) {
 
   if (length(dups) > 0) rp <- rp[-dups, ]
 
-  rp <- fix.tumor.factors(text.to.tstage(rp))
-
   # The grades are too granular.
   diff.grade<-function(x) {
     if ( grepl('.*poor',x)  ) { # poor & moderate_to_poor
@@ -528,35 +595,41 @@ read.pathology<-function(ocs, table, occams_ids=NULL, rulesFile=NULL, ...) {
   }
 
   # Add a TNM column assessed based on the Tstage, Nstage, and Mstage. Add a differentiation column with fewer variables, recode the response column for easier reading. Finally, add a BE adjacent column that assess both Microscopic and Macroscopic columns for a binary response.
-  rp = rp %>% ungroup %>% group_by(RP.StudySubjectID) %>% 
-    dplyr::mutate(
-      #RP.TNMStage.c = tnmStage(RP.TStage.PrimaryTumour, RP.Nstage.RP.TNM7, RP.MStage.DistantMetastasis),
-      RP.TumourDifferentiation.c = diff.grade(RP.TumourGradingDifferentiationStatus),
-      RP.TumourResponse = recode_factor(RP.TumourResponse,'0pc_remaining'='0%','less_than_20pc'='<20%', 'greater_than_or_equals_to_20pc'='≥20%', 'less_than_50pc'='<50%', 'greater_than_or_equals_to_50pc'='≥50%', .ordered=T),
-      RP.Location = factor(RP.Location, levels=c('oesophageal','goj','gastric')),
-      RP.MandardScoreForResponse = factor(RP.MandardScoreForResponse, levels=c('TRG1','TRG2','TRG3','TRG4','TRG5')),
-      # If you see it macro, then it is there micro as well
-      RP.BarrettsAdjacentToTumour.c = ifelse(RP.BarettsAdjacentToTumourMicroscopicIM == 'yes' | RP.BarettsAdjacentToTumourMacroscopic == 'yes','yes','no')
-    ) %>% dplyr::select(-matches('OpenClinica'))
+  if (nrow(rp) > 0) {
+    rp <- fix.tumor.factors(text.to.tstage(rp))
+  
+    rp <- rp %>% ungroup %>% group_by(RP.StudySubjectID) %>% 
+      dplyr::mutate(
+        #RP.TNMStage.c = tnmStage(RP.TStage.PrimaryTumour, RP.Nstage.RP.TNM7, RP.MStage.DistantMetastasis),
+        RP.TumourDifferentiation.c = diff.grade(RP.TumourGradingDifferentiationStatus),
+        RP.TumourResponse = recode_factor(RP.TumourResponse,'0pc_remaining'='0%','less_than_20pc'='<20%', 'greater_than_or_equals_to_20pc'='≥20%', 'less_than_50pc'='<50%', 'greater_than_or_equals_to_50pc'='≥50%', .ordered=T),
+        RP.Location = factor(RP.Location, levels=c('oesophageal','goj','gastric')),
+        RP.MandardScoreForResponse = factor(RP.MandardScoreForResponse, levels=c('TRG1','TRG2','TRG3','TRG4','TRG5')),
+        # If you see it macro, then it is there micro as well
+        RP.BarrettsAdjacentToTumour.c = ifelse(RP.BarettsAdjacentToTumourMicroscopicIM == 'yes' | RP.BarettsAdjacentToTumourMacroscopic == 'yes','yes','no')
+      ) %>% dplyr::select(-matches('OpenClinica'))
 
-  # This was a check performed by skillcoyne and chughes in 2016 Sept to evaluate the entry of BE information into OpenClinica. Only AH patients were evaluated.  This file alters the BE adjacent information for only those patients.
-  file = system.file("extdata", "be_updates_20160930.txt", package="openclinica.occams")
-  if (!exists('be_updates') & (!is.null(file) & file.exists(file))) {
-    if (verbose) message(paste("Reading", file))
-    be_updates = readr::read_tsv(file, col_types='ccc')
+    # This was a check performed by skillcoyne and chughes in 2016 Sept to evaluate the entry of BE information into OpenClinica. Only AH patients were evaluated.  This file alters the BE adjacent information for only those patients.
+    file = system.file("extdata", "be_updates_20160930.txt", package="openclinica.occams")
+    if (!exists('be_updates') & (!is.null(file) & file.exists(file))) {
+      if (verbose) message(paste("Reading", file))
+      be_updates = readr::read_tsv(file, col_types='ccc')
+  
+      if (verbose) message("Updating RP.BarrettsAdjacent patients from Caitrona's worksheet.")
+      be_updates = be_updates %>% dplyr::mutate( `Barret's Confirmed`= ifelse(`Barret's Confirmed` == '?', NA, `Barret's Confirmed`),
+                                                 `Barret's Confirmed` = recode(`Barret's Confirmed`, 'N'='no','Y'='yes'))
 
-    if (verbose) message("Updating RP.BarrettsAdjacent patients from Caitrona's worksheet.")
-    be_updates = be_updates %>% dplyr::mutate( `Barret's Confirmed`= ifelse(`Barret's Confirmed` == '?', NA, `Barret's Confirmed`),
-                                               `Barret's Confirmed` = recode(`Barret's Confirmed`, 'N'='no','Y'='yes'))
+      # Assume Caitrona's are the final say (they matched other than NA anyhow)
+      rp = left_join(rp, be_updates, by=c('RP.StudySubjectID'='OCCAMS/ID')) %>% group_by(RP.StudySubjectID) %>% 
+        dplyr::mutate(RP.BarrettsAdjacentToTumour.c = mr(`Barret's Confirmed`, RP.BarrettsAdjacentToTumour.c,1)) %>% 
+        dplyr::select(-Source, -contains('Confirmed'))
+    }
 
-    # Assume Caitrona's are the final say (they matched other than NA anyhow)
-    rp = left_join(rp, be_updates, by=c('RP.StudySubjectID'='OCCAMS/ID')) %>% group_by(RP.StudySubjectID) %>% 
-      dplyr::mutate(RP.BarrettsAdjacentToTumour.c = mr(`Barret's Confirmed`, RP.BarrettsAdjacentToTumour.c,1)) %>% 
-      dplyr::select(-Source, -contains('Confirmed'))
+    rp = rp %>% ungroup %>% dplyr::mutate(RP.BarrettsAdjacentToTumour.c = factor(RP.BarrettsAdjacentToTumour.c)) %>% 
+      dplyr::select(-contains('Nstage.RP.TNMSystem'),-contains('RP.TNM6'), -matches('PathologistName')) %>% group_by(RP.StudySubjectID)
+  } else {
+    rp <- rp %>% dplyr::mutate_at(vars(StudySite, StudySubjectID), list(~as.character(.))) -> rp
   }
-
-  rp = rp %>% ungroup %>% dplyr::mutate(RP.BarrettsAdjacentToTumour.c = factor(RP.BarrettsAdjacentToTumour.c)) %>% 
-    dplyr::select(-contains('Nstage.RP.TNMSystem'),-contains('RP.TNM6'), -matches('PathologistName')) %>% group_by(RP.StudySubjectID)
 
   if(verbose) message(paste(nrow(rp), "pathology patients"))
 

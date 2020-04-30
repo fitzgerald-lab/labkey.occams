@@ -145,10 +145,12 @@ get.table.data<-function(ocs, table, columns=NULL, uniqueID='StudySubjectID', ru
     if (nrow(rows) <= 0)
       stop("No rows found that matched the column filters.")
   }
+  
+  
+    rows <- suppressWarnings(clean.rows(rows, uniqueID, rulesFile))
 
-  rows <- suppressWarnings(clean.rows(rows, uniqueID, rulesFile))
   if (!is.null(uniqueID))
-    rows = suppressWarnings(rows %>% dplyr::group_by_at(vars(contains(uniqueID))))
+    rows <- suppressWarnings(rows %>% dplyr::group_by_at(vars(contains(uniqueID))))
 
   rows <- rows %>% dplyr::select(-contains('CRF'))
 
@@ -161,14 +163,14 @@ clean.rows<-function(rows, uniqueID=NULL, rulesFile=NULL) {
 
   # Trim whitespace & fix NAs
   #rows %>% rowwise %>% mutate_if(is.character, funs(clean.na))
-  rows = rows %>% mutate_if(is.character, funs(trim))
+  rows = rows %>% dplyr::mutate_if(is.character, funs(trim))
 
-  if (!is.null(rulesFile)) {
+  if (!is.null(rulesFile) & nrow(rows) > 0) {
     failed_rules <- editrules(rulesFile, rows)
     rows <- failed_rules$df
   }
 
-  rows = rows %>% rowwise %>% mutate_if(is.character, funs(clean.na))
+  rows <- rows %>% rowwise %>% dplyr::mutate_if(is.character, list(clean.na))
 
   return(rows)
 }
@@ -194,7 +196,7 @@ editrules<-function(file, df, verbose=T) {
 
   # Date
   cols = rules %>% dplyr::filter(Def == 'date') %>% dplyr::select(Column) %>% pull
-  if (length(cols) > 0) df = df %>% ungroup %>% dplyr::mutate_at(cols, funs(as.Date))
+  if (length(cols) > 0) df = df %>% ungroup %>% dplyr::mutate_at(cols, list(~as.Date(.,origin = "1960-10-01")))
 
   # Character
   cols = rules %>% dplyr::filter(Def == 'character') %>% dplyr::select(Column) %>% pull

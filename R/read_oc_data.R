@@ -89,8 +89,7 @@ download.wide.format<-function(ocs, occams_ids=NULL, missing=NULL,versions='z1',
 
   if (verbose) message("Creating final patient table")
   # Merge final table
-
-  all = dplyr::full_join(di,ex,by=c('StudySubjectID','StudySite')) %>%
+  all <- dplyr::full_join(di,ex,by=c('StudySubjectID','StudySite')) %>%
     dplyr::full_join(rd,by=c('StudySubjectID','StudySite')) %>%
     dplyr::full_join(tp,by=c('StudySubjectID','StudySite')) %>%
     dplyr::full_join(ps,by=c('StudySubjectID','StudySite')) %>%
@@ -147,7 +146,7 @@ download.wide.format<-function(ocs, occams_ids=NULL, missing=NULL,versions='z1',
 
   bad = with(all, which(Weeks.Survival.c < 1))
   message(paste(length(bad), "patients have a diagnosis date before their last seen (death/surgery/etc) date."))
-  all[bad, c('ID','RD.DiagnosisDate.c', 'FE.LastSeenDate.c', 'Weeks.Survival.c')] = NA
+  all[bad, c('Weeks.Survival.c')] = NA
 
   tc <- read.tissue.collection(ocs, ordered_tables$tc, rulesFiles=NULL, occams_ids=occams_ids)
   return(list('patients'=all, 'family_history'=history, 'tissues'=tc))

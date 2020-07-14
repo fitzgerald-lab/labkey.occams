@@ -17,7 +17,7 @@ connect.to.labkey<-function(file="~/.labkey.cred") {
 
   if (length(grep('path|pwd|url|user', colnames(vars) )) < 4) stop('Missing information in the labkey.cred file. path,pwd,url,user are required.')
 
-  return(create.connection(url=vars$url, path=vars$path, user=vars$user, pwd=vars$pwd))
+  return(create.connection(url=vars$url, path=vars$path, user=vars$user, pwd=vars$pwd, schema='oc'))
 }
 
 create.session<-function(url="https://occams.cs.ox.ac.uk/labkey", path="/ICGC/Cohorts/All Study Subjects", user, pwd) {
@@ -32,17 +32,31 @@ create.session<-function(url="https://occams.cs.ox.ac.uk/labkey", path="/ICGC/Co
   return(session)
 }
 
-create.connection<-function(url="https://occams.cs.ox.ac.uk/labkey", path="/ICGC/Cohorts/All Study Subjects", user, pwd) {
+anonymized.ids<-function(url="https://occams.cs.ox.ac.uk/labkey", user, pwd) {
+
+  ocs <- create.connection(url, "/ICGC/Cohorts/OCCAMS SECURE CASE ID", user, pwd, schema='lists')
+
+  table = names(ocs$schema)[1]
+  
+  if (!grepl('occams_case_ids_secure_case_ids', table))
+    stop(paste0("Expected table name to include 'occams_case_ids_secure_case_ids', tables available:\n\t", paste(names(ocs$schema), collapse='\n\t')) )
+  
+  rows <- suppressWarnings(Rlabkey::getRows(ocs$session, ocs$schema[[table]]))
+  
+  as_tibble(rows) %>% set_names(c('OCCAMS.ID','SecureID'))
+}
+
+create.connection<-function(url="https://occams.cs.ox.ac.uk/labkey", path="/ICGC/Cohorts/All Study Subjects", user=NULL, pwd=NULL, schema='oc') {
   session <- create.session(url,path,user,pwd)
 
   if (is.null(session))
     stop("Failed to create session with provided credentials")
 
   oc <- tryCatch({
-    Rlabkey::getSchema(session, "oc")
+    Rlabkey::getSchema(session, schema)
   }, error = function(e) {
     tryCatch({
-      Rlabkey::getSchema(session, 'oc')
+      Rlabkey::getSchema(session, schema)
     }, error = function(e1){
       stop(paste("Failed to get schema from LabKey server:", e ))
     })

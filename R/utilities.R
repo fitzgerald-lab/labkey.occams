@@ -55,17 +55,17 @@ trim<-function(x) {
 
 # Recode and order siwert types
 recode.siewert<-function(df) {
-  grp = group_vars(df)
-  df = df %>% ungroup %>% dplyr::mutate_at(vars(contains('SiewertClassification')), funs(recode_factor), '1'='Type I','2'='Type II','3'='Type III', .ordered=F)
-  if (length(grp) > 0) df = df %>% group_by(!!grp)
+  grp = dplyr::group_vars(df)
+  df = df %>% ungroup %>% dplyr::mutate_at(vars(contains('SiewertClassification')), funs(dplyr::recode_factor), '1'='Type I','2'='Type II','3'='Type III', .ordered=F)
+  if (length(grp) > 0) df = df %>% dplyr::group_by(!!grp)
   return(df)
 }
 
 # order TNM stages
 recode.TNM<-function(df) {
-  grp = group_vars(df)
+  grp = dplyr::group_vars(df)
   df = df %>% ungroup %>% dplyr::mutate_at(vars(contains('TNMStage')), funs(factor), levels=c('I','II','III', 'IV'), ordered=T)
-  if (length(grp) > 0) df = df %>% group_by(!!grp)
+  if (length(grp) > 0) df = df %>% dplyr::group_by(!!grp)
   return(df)
 }
 

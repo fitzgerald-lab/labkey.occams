@@ -46,7 +46,7 @@ dump.clinical.data<-function(ocs, occams_ids = NULL, prefixes=NULL, version='z1'
 #' @param missing Replace missing values with this string, default is NA
 #' @param versions The table versions used from labkey, default is 'z1'
 #' @param verbose
-#'
+#' @return named list of tibbles: patients, family_history, tissues
 #' @author skillcoyne
 #' @export
 download.wide.format<-function(ocs, occams_ids=NULL, missing=NULL,versions='z1', verbose=T) {
@@ -85,7 +85,8 @@ download.wide.format<-function(ocs, occams_ids=NULL, missing=NULL,versions='z1',
   st <- read.surgery(ocs, ordered_tables$st, rulesFile=NULL, occams_ids=occams_ids, verbose=verbose) %>% 
     dplyr::rename_at(vars(matches('Study')), list(~sub('^ST\\.','',.)))
 
-  rp <- read.pathology(ocs, ordered_tables$rp, occams_ids=occams_ids, rulesFile=paste(path.package('openclinica.occams'),'editrules/rp_editrules.txt',sep='/'), verbose=verbose) %>% dplyr::rename_at(vars(matches('Study')), list(~sub('^RP\\.','',.)))
+  rp <- read.pathology(ocs, ordered_tables$rp, occams_ids=occams_ids, rulesFile=paste(path.package('openclinica.occams'),'editrules/rp_editrules.txt',sep='/'), verbose=verbose) %>% 
+    dplyr::rename_at(vars(matches('Study')), list(~sub('^RP\\.','',.)))
 
   if (verbose) message("Creating final patient table")
   # Merge final table
@@ -99,9 +100,9 @@ download.wide.format<-function(ocs, occams_ids=NULL, missing=NULL,versions='z1',
     dplyr::left_join(fe,by=c('StudySubjectID','StudySite')) %>%
     dplyr::rename(ID=StudySubjectID) %>% dplyr::group_by(ID) %>% 
     dplyr::select(-contains('CRF'), -contains('OpenClinica')) %>%
-    ungroup %>% recode.siewert %>% 
+    dplyr::ungroup() %>% recode.siewert %>% 
     #recode.TNM %>%
-    group_by(ID) %>% dplyr::select(ID, StudySite, everything())
+    dplyr::group_by(ID) %>% dplyr::select(ID, StudySite, everything())
 
   if (verbose) message(paste("Final patient total:", nrow(all)))
 
@@ -142,7 +143,7 @@ download.wide.format<-function(ocs, occams_ids=NULL, missing=NULL,versions='z1',
     return(firstDate)
   }))
 
-  all <- all %>% group_by(ID) %>%
+  all <- all %>% dplyr::group_by(ID) %>%
     dplyr::mutate(Weeks.Survival.c = round(as.numeric(difftime(FE.LastSeenDate.c, RD.DiagnosisDate.c, units='weeks')))) %>% 
     dplyr::select(ID, StudySite, Weeks.Survival.c, RD.DiagnosisDate.c, FE.LastSeenDate.c, everything())
 

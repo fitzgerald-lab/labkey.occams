@@ -70,7 +70,6 @@ create.connection<-function(url="https://occams.cs.ox.ac.uk/labkey", path="/ICGC
   return(occams.session)
 }
 
-
 #' Get the table prefixes from the schema
 #' @name get.prefixes
 #' @param ocs Labkey connection

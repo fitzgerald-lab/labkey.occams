@@ -1,7 +1,7 @@
 Package: openclinica.occams
 Type: Package
 Title: Download and clean LabKey data
-Version: 0.3
+Version: 0.4.1
 Author: skillcoyne
 Maintainer: The package maintainer <sk875@mrc-cu.cam.ac.uk>
 Description: More about what it does (maybe more than one line)

@@ -24,8 +24,9 @@ download.wide.format(
 \item{missing}{Replace missing values with this string, default is NA}
 
 \item{versions}{The table versions used from labkey, default is 'z1'}
-
-\item{verbose}{}
+}
+\value{
+named list of tibbles: patients, family_history, tissues
 }
 \description{
 Download in wide format the Labkey data for all or a selected group of patients.

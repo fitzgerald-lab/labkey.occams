@@ -261,13 +261,12 @@ read.followup<-function(ocs, tables, occams_ids=NULL, rulesFiles=NULL, ...) {
     return(NA_character_)            
   }
   
-  fe1 <- fe1 %>% dplyr::group_by(FE1.StudySubjectID, FE1.StudySite) %>%
+  fe1 <- fe1 %>% ungroup %>% dplyr::group_by(FE1.StudySubjectID, FE1.StudySite) %>%
     dplyr::arrange(desc(FE1.DateOfUpdate)) %>% 
     dplyr::summarise(FE.LatestDateOfUpdate.c = FE1.DateOfUpdate[1],
                      FE.LatestReasonForFollowUp.c = FE1.ReasonForFollowUp[1],
                      FE.HasOriginalDiseaseReoccurred = dis.r(FE1.StudySubjectID,FE1.HasOriginalDiseaseReoccurred, FE1.DateOriginalDiseaseReoccurred, FE1.DateOfUpdate,1),
-                     FE.DateOriginalDiseaseReoccurred = as.Date(dis.r(FE1.StudySubjectID,FE1.HasOriginalDiseaseReoccurred, FE1.DateOriginalDiseaseReoccurred, FE1.DateOfUpdate,2) )
-                     ) 
+                     FE.DateOriginalDiseaseReoccurred = as.Date(dis.r(FE1.StudySubjectID,FE1.HasOriginalDiseaseReoccurred, FE1.DateOriginalDiseaseReoccurred, FE1.DateOfUpdate,2) )) 
   
   feep <- left_join(feep, fe1, by=c('FE.StudySubjectID'='FE1.StudySubjectID'))
   
@@ -285,7 +284,7 @@ read.followup<-function(ocs, tables, occams_ids=NULL, rulesFiles=NULL, ...) {
   
   frr <- frr %>% dplyr::rename_at(vars(matches('^FE')), list(~sub('^FE', 'FR', .))) %>%
     dplyr::rename_at(vars(matches('Study(Subject|Site)')), list(~sub('FR[0-1]', 'FR',.))) %>%
-    dplyr::group_by(FR.StudySubjectID, FR.StudySite) %>%
+    ungroup %>% dplyr::group_by(FR.StudySubjectID, FR.StudySite) %>%
     dplyr::arrange(desc(FR.DateOfFollowUpEvent)) %>% 
     #filter(!grepl('death', FE1.ReasonForFollowUp)) %>%
     dplyr::summarise(FR.LatestDateOfUpdate.c = FR.DateOfFollowUpEvent[1],
@@ -605,16 +604,17 @@ read.pathology<-function(ocs, table, occams_ids=NULL, rulesFile=NULL, ...) {
   if (nrow(rp) > 0) {
     rp <- fix.tumor.factors(text.to.tstage(rp))
   
-    rp <- rp %>% ungroup %>% group_by(RP.StudySubjectID) %>% 
+    rp <- rp %>% ungroup %>% 
+      dplyr::mutate(RP.TumourResponse = factor(RP.TumourResponse), 
+                    RP.Location = factor(RP.Location, levels=c('oesophageal','goj','gastric')),
+                    RP.MandardScoreForResponse = factor(RP.MandardScoreForResponse, levels=c('TRG1','TRG2','TRG3','TRG4','TRG5')),
+                    #RP.TNMStage.c = tnmStage(RP.TStage.PrimaryTumour, RP.Nstage.RP.TNM7, RP.MStage.DistantMetastasis),
+                    # If you see it macro, then it is there micro as well
+                    RP.BarrettsAdjacentToTumour.c = ifelse(RP.BarettsAdjacentToTumourMicroscopicIM == 'yes' | RP.BarettsAdjacentToTumourMacroscopic == 'yes','yes','no')) %>% 
+      dplyr::group_by(RP.StudySubjectID) %>% 
       dplyr::mutate(
-        #RP.TNMStage.c = tnmStage(RP.TStage.PrimaryTumour, RP.Nstage.RP.TNM7, RP.MStage.DistantMetastasis),
         RP.TumourDifferentiation.c = diff.grade(RP.TumourGradingDifferentiationStatus),
-        RP.TumourResponse = recode_factor(RP.TumourResponse,'0pc_remaining'='0%','less_than_20pc'='<20%', 'greater_than_or_equals_to_20pc'='≥20%', 'less_than_50pc'='<50%', 'greater_than_or_equals_to_50pc'='≥50%', .ordered=T),
-        RP.Location = factor(RP.Location, levels=c('oesophageal','goj','gastric')),
-        RP.MandardScoreForResponse = factor(RP.MandardScoreForResponse, levels=c('TRG1','TRG2','TRG3','TRG4','TRG5')),
-        # If you see it macro, then it is there micro as well
-        RP.BarrettsAdjacentToTumour.c = ifelse(RP.BarettsAdjacentToTumourMicroscopicIM == 'yes' | RP.BarettsAdjacentToTumourMacroscopic == 'yes','yes','no')
-      ) %>% dplyr::select(-matches('OpenClinica'))
+        RP.TumourResponse = recode_factor(RP.TumourResponse,'0pc_remaining'='0%','less_than_20pc'='<20%', 'greater_than_or_equals_to_20pc'='≥20%', 'less_than_50pc'='<50%', 'greater_than_or_equals_to_50pc'='≥50%', .ordered=T)) %>% dplyr::select(-matches('OpenClinica'))
 
     # This was a check performed by skillcoyne and chughes in 2016 Sept to evaluate the entry of BE information into OpenClinica. Only AH patients were evaluated.  This file alters the BE adjacent information for only those patients.
     file = system.file("extdata", "be_updates_20160930.txt", package="openclinica.occams")

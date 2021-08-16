@@ -49,7 +49,7 @@ dump.clinical.data<-function(ocs, occams_ids = NULL, prefixes=NULL, version='z1'
 #' @return named list of tibbles: patients, family_history, tissues
 #' @author skillcoyne
 #' @export
-download.wide.format<-function(ocs, occams_ids=NULL, missing=NULL,versions='z1', verbose=T) {
+download.wide.format<-function(ocs, occams_ids=NULL, missing=NULL, versions='z1', verbose=T) {
   #prefixes=c('di','rd','ex','ps','tp','tr','st','rp','fe|ep','tc')
   prefixes = get.prefixes(ocs,versions)
   if (inherits(ocs, "OCCAMSLabkey")) {

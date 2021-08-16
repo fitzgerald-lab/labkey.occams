@@ -158,8 +158,7 @@ get.table.data<-function(ocs, table, columns=NULL, uniqueID='StudySubjectID', ru
     if (nrow(rows) <= 0)
       stop("No rows found that matched the column filters.")
   }
-  
-  
+
     rows <- suppressWarnings(clean.rows(rows, uniqueID, rulesFile))
 
   if (!is.null(uniqueID))

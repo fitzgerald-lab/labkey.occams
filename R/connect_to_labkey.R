@@ -32,9 +32,12 @@ create.session<-function(url="https://occams.cs.ox.ac.uk/labkey", path="/ICGC/Co
   return(session)
 }
 
-anonymized.ids<-function(url="https://occams.cs.ox.ac.uk/labkey", user, pwd) {
-
-  ocs <- create.connection(url, "/ICGC/Cohorts/OCCAMS SECURE CASE ID", user, pwd, schema='lists')
+anonymized.ids<-function(file="~/.labkey.cred") {
+  
+  file = path.expand(file)
+  vars = readr::read_delim(file, delim="=", col_names = F, col_types = 'cc') %>% tidyr::spread(X1, X2)
+  
+  ocs <- create.connection(vars$url, "/ICGC/Cohorts/OCCAMS SECURE CASE ID", vars$user, vars$pwd, schema='lists')
 
   table = names(ocs$schema)[1]
   

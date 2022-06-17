@@ -56,7 +56,7 @@ trim<-function(x) {
 # Recode and order siwert types
 recode.siewert<-function(df) {
   grp = dplyr::group_vars(df)
-  df = df %>% ungroup %>% dplyr::mutate_at(vars(contains('SiewertClassification')), funs(dplyr::recode_factor), '1'='Type I','2'='Type II','3'='Type III', .ordered=F)
+df = df %>% ungroup %>% dplyr::mutate_at(vars(contains('SiewertClassification')), funs(dplyr::recode_factor), '1'='Type I','2'='Type II','3'='Type III', .ordered=F)
   if (length(grp) > 0) df = df %>% dplyr::group_by(!!grp)
   return(df)
 }

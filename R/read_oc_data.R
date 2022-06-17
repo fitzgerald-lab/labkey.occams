@@ -148,7 +148,7 @@ download.wide.format<-function(ocs, occams_ids=NULL, missing=NULL, versions='z1'
     dplyr::select(ID, StudySite, Weeks.Survival.c, RD.DiagnosisDate.c, FE.LastSeenDate.c, everything())
 
   bad = with(all, which(Weeks.Survival.c < 1))
-  message(paste(length(bad), "patients have a diagnosis date before their last seen (death/surgery/etc) date."))
+  message(paste(length(bad), "patients have a diagnosis date after their last seen (death/surgery/etc) date."))
   all[bad, c('Weeks.Survival.c')] = NA
 
   tc <- read.tissue.collection(ocs, ordered_tables$tc, rulesFiles=NULL, occams_ids=occams_ids)

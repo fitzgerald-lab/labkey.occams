@@ -8,3 +8,7 @@
 *.png
 .Rproj.user
 packrat/lib*/
+inst/
+*.zip
+*creds
+*Rbuildignore
